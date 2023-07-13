@@ -94,8 +94,8 @@ pub fn shanks_algorithm_with_output(
     prime: u32,
     g: u32,
     num: u32,
-) -> (Option<u32>, HashMap<u32, i32>, HashMap<u32, i32>) {
-    assert!(g % prime != 0 && num % prime != 0);
+) -> (Option<u32>, u32, u32, HashMap<u32, i32>, HashMap<u32, i32>) {
+    assert!(is_prime(prime) && g % prime != 0 && num % prime != 0);
 
     // Compute order of base
     let order = compute_order(prime, g);
@@ -125,7 +125,7 @@ pub fn shanks_algorithm_with_output(
         // Then check if we have a match in list1
         if let Some(x) = list1.get(&((num * u) % prime)) {
             let res = x + (i * (n as i32));
-            return (Some(res as u32), list1, list2);
+            return (Some(res as u32), base_inverse, n, list1, list2);
         }
 
         // otherwise update u and proceed
@@ -134,7 +134,7 @@ pub fn shanks_algorithm_with_output(
     }
 
     // there is no discrete logarithm for the given base and num
-    (None, list1, list2)
+    (None, base_inverse, n, list1, list2)
 }
 
 pub struct FpUnitsDiscLogSolver {
