@@ -10,6 +10,133 @@ pub fn is_prime(p: u32) -> bool {
     true
 }
 
+/// Function that implements the fast powering algorithm. Takes `prime` a prime, `g` a base and `exp` an exponent that we would
+/// like to raise `g` to the power of. The return value is `g` raised to `exp` modulo `prime`, the function panics if `prime` is not prime.
+pub fn fast_power(prime: u32, mut g: u32, mut exp: u32) -> u32 {
+    assert!(is_prime(prime));
+    let mut result = 1;
+    while exp > 0 {
+        if exp % 2 == 1 {
+            result *= g;
+            result %= prime;
+        }
+
+        g *= g;
+        g %= prime;
+        exp /= 2;
+    }
+    result
+}
+
+/// Function that will compute the multiplicative inverse of a given integer `g` modulo `prime` where `prime` must be a prime.
+/// The function will panic if `prime` is not prime or if `prime` divides `g`.
+pub fn compute_inverse(prime: u32, g: u32) -> u32 {
+    assert!(is_prime(prime) && g % prime != 0);
+    fast_power(prime, g, prime - 2)
+}
+
+/// Function that will compute the order of an integer `g` in the group of units from the field Fp, where p is the prime `prime`.
+/// The funciton will panic if `prime` is not prime or `prime` divides `g`.
+pub fn compute_order(prime: u32, mut g: u32) -> u32 {
+    assert!(is_prime(prime) && g % prime != 0);
+    let base = g;
+    let mut n = 1;
+    while g != 1 {
+        g *= base;
+        g %= prime;
+        n += 1;
+    }
+    n
+}
+
+/// Function will solve the discrete logarithm of `num` with base `g` in the group of units from the field Fp, where p is the prime supplied argument `prime`.
+/// The funciton will panic if `prime` is not prime, `prime` divides `num` or `prime` divides `g`.
+pub fn shanks_algorithm(prime: u32, g: u32, num: u32) -> Option<u32> {
+    assert!(is_prime(prime) && g % prime != 0 && num % prime != 0);
+    // First compute order of g
+    let base_order = compute_order(prime, g);
+    let n = f32::floor(f32::sqrt(base_order as f32)) as u32 + 1;
+    let mut prod = 1;
+
+    let mut list1 = HashMap::new();
+
+    for i in 0..(n as i32) {
+        list1.insert(prod, i);
+        prod *= g;
+        prod %= prime;
+    }
+
+    // insert final value
+    list1.insert(prod, n as i32);
+
+    // Now compute second list, we don't actually need to allocate any memory for this only set up variables
+    let mut u = 1;
+    let prod_inverse = compute_inverse(prime, prod);
+
+    for i in 0..=(n as i32) {
+        // Check if we have a match
+        if let Some(x) = list1.get(&(num * u)) {
+            let res = (x + (i * (n as i32))) as u32;
+            return Some(res);
+        }
+        // otherwise update value of u
+        u *= prod_inverse;
+        u %= prime;
+    }
+
+    None
+}
+
+/// Function will solve the discrete logarithm of `num` with base `g` in the group of units from the field Fp, where p is the prime supplied argument `prime`.
+/// The function will also return the lists tat were generated the collision. The funciton will panic if `prime` is not prime,
+/// `prime` divides `num` or `prime` divides `g`.
+pub fn shanks_algorithm_with_output(
+    prime: u32,
+    g: u32,
+    num: u32,
+) -> (Option<u32>, HashMap<u32, i32>, HashMap<u32, i32>) {
+    assert!(g % prime != 0 && num % prime != 0);
+
+    // Compute order of base
+    let order = compute_order(prime, g);
+    let n = f32::floor(f32::sqrt(order as f32)) as u32 + 1;
+
+    // Generate our first list
+    let mut list1 = HashMap::new();
+    let mut prod = 1;
+
+    for i in 0..(n as i32) {
+        list1.insert(prod, i);
+        prod *= g;
+        prod %= prime;
+    }
+
+    // insert final value into the list1
+    list1.insert(g, n as i32);
+
+    // Now compute the inverse of base^n, note g = base^n from our previous computation
+    let mut list2 = HashMap::new();
+    let mut u = 1;
+    let base_inverse = compute_inverse(prime, prod);
+
+    for i in 0..=(n as i32) {
+        // First always insert into list2
+        list2.insert(num * u, i);
+        // Then check if we have a match in list1
+        if let Some(x) = list1.get(&((num * u) % prime)) {
+            let res = x + (i * (n as i32));
+            return (Some(res as u32), list1, list2);
+        }
+
+        // otherwise update u and proceed
+        u *= base_inverse;
+        u %= prime;
+    }
+
+    // there is no discrete logarithm for the given base and num
+    (None, list1, list2)
+}
+
 pub struct FpUnitsDiscLogSolver {
     pub prime: u32,
 }
