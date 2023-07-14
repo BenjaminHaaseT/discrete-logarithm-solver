@@ -7,6 +7,7 @@ use actix_web::{
 use discrete_logarithm_lib::{is_prime, shanks_algorithm_with_output, FpUnitsDiscLogSolver};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::ops::Deref;
 use std::sync::Mutex;
 
 #[derive(Deserialize)]
@@ -84,9 +85,9 @@ impl AppSolver {
 #[post("/new/{prime}")]
 async fn new_solver(
     path: web::Path<u32>,
-    data: web::Data<AppSolver>,
+    app_data: web::Data<AppSolver>,
 ) -> Result<HttpResponse, UserError> {
-    let mut guard = if let Ok(guard_option) = data.as_ref().solver.lock() {
+    let mut guard = if let Ok(guard_option) = app_data.as_ref().solver.lock() {
         guard_option
     } else {
         return Err(UserError::InternalServer);
@@ -101,8 +102,8 @@ async fn new_solver(
 }
 
 #[get("/modulus")]
-async fn get_modulus(data: web::Data<AppSolver>) -> Result<HttpResponse, UserError> {
-    let guard = if let Ok(guard_option) = data.as_ref().solver.lock() {
+async fn get_modulus(app_data: web::Data<AppSolver>) -> Result<HttpResponse, UserError> {
+    let guard = if let Ok(guard_option) = app_data.as_ref().solver.lock() {
         guard_option
     } else {
         return Err(UserError::InternalServer);
@@ -112,7 +113,51 @@ async fn get_modulus(data: web::Data<AppSolver>) -> Result<HttpResponse, UserErr
         return Ok(HttpResponse::Ok().body(format!("prime modulus is {}\n", fp.prime)));
     }
 
-    Ok(HttpResponse::Conflict().body("no solver created yet\n"))
+    Err(UserError::BadInput(String::from(
+        "no solver has been created yet",
+    )))
+}
+
+#[get("/solve")]
+async fn solve_discrete_logarithm_with_solver(
+    data: web::Query<(u32, u32)>,
+    app_data: web::Data<AppSolver>,
+) -> Result<HttpResponse, UserError> {
+    // First validate that we have an instantiated solver
+    let guard = if let Ok(guard_option) = app_data.as_ref().solver.lock() {
+        guard_option
+    } else {
+        return Err(UserError::InternalServer);
+    };
+
+    // get a refernce to the solver if we have one
+    let solver = match guard.deref() {
+        Some(ref fp) => fp,
+        None => return Err(UserError::BadInput(String::from("no solver created yet"))),
+    };
+
+    // Get data from payload and validate it
+    let (base, num) = data.0;
+    if base % solver.prime == 0 {
+        return Err(UserError::BadInput(format!(
+            "{} is not a valid base since {} mod {} = 0",
+            base, base, solver.prime
+        )));
+    } else if num % solver.prime == 0 {
+        return Err(UserError::BadInput(format!(
+            "no logarithm for {} since {} mod {} = 0",
+            num, num, solver.prime
+        )));
+    }
+
+    if let Some(x) = solver.shanks_algorithm(base, num) {
+        return Ok(HttpResponse::Ok().body(x.to_string()));
+    }
+
+    Err(UserError::BadInput(format!(
+        "{} has not discrete logarithm with base {} modulo {}",
+        num, base, solver.prime
+    )))
 }
 
 #[get("/solve")]
@@ -165,10 +210,13 @@ async fn main() -> std::io::Result<()> {
 
     HttpServer::new(move || {
         App::new()
-            .app_data(app_solver.clone())
-            .service(new_solver)
-            .service(get_modulus)
             .service(solve_discrete_logarithm_with_output)
+            .service(
+                web::scope("/solver")
+                    .app_data(app_solver.clone())
+                    .service(new_solver)
+                    .service(get_modulus),
+            )
     })
     .bind((address, port))?
     .run()
