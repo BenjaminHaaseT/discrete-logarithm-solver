@@ -7,7 +7,7 @@ use actix_web::{
 use discrete_logarithm_lib::{is_prime, shanks_algorithm_with_output, FpUnitsDiscLogSolver};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 
 #[derive(Deserialize)]
 struct Inputs {
@@ -69,46 +69,56 @@ impl error::ResponseError for UserError {
     }
 }
 
-// struct AppSolver {
-//     solver: Mutex<Option<FpUnitsDiscLogSolver>>,
-// }
+struct AppSolver {
+    solver: Mutex<Option<FpUnitsDiscLogSolver>>,
+}
 
-// impl AppSolver {
-//     fn new() -> Self {
-//         AppSolver {
-//             solver: Mutex::new(None),
-//         }
-//     }
-// }
+impl AppSolver {
+    fn new() -> Self {
+        AppSolver {
+            solver: Mutex::new(None),
+        }
+    }
+}
 
-// #[post("/new/{prime}")]
-// async fn new_solver(path: web::Path<u32>, data: web::Data<AppSolver>) -> impl Responder {
-//     let mut guard = if let Ok(guard_option) = data.as_ref().solver.lock() {
-//         guard_option
-//     } else {
-//         return HttpResponse::Conflict().finish();
-//     };
-//     *guard = Some(FpUnitsDiscLogSolver::new(path.into_inner()));
-//     HttpResponse::Ok().body("created solver successfully\n")
-// }
+#[post("/new/{prime}")]
+async fn new_solver(
+    path: web::Path<u32>,
+    data: web::Data<AppSolver>,
+) -> Result<HttpResponse, UserError> {
+    let mut guard = if let Ok(guard_option) = data.as_ref().solver.lock() {
+        guard_option
+    } else {
+        return Err(UserError::InternalServer);
+    };
+    // validate input from path
+    let prime = path.into_inner();
+    if !is_prime(prime) {
+        return Err(UserError::BadInput(format!("{} is not prime", prime)));
+    }
+    *guard = Some(FpUnitsDiscLogSolver::new(prime));
+    Ok(HttpResponse::Ok().body("created solver successfully\n"))
+}
 
-// #[get("/modulus")]
-// async fn get_modulus(data: web::Data<AppSolver>) -> impl Responder {
-//     let guard = if let Ok(guard_option) = data.as_ref().solver.lock() {
-//         guard_option
-//     } else {
-//         return HttpResponse::Conflict().finish();
-//     };
+#[get("/modulus")]
+async fn get_modulus(data: web::Data<AppSolver>) -> Result<HttpResponse, UserError> {
+    let guard = if let Ok(guard_option) = data.as_ref().solver.lock() {
+        guard_option
+    } else {
+        return Err(UserError::InternalServer);
+    };
 
-//     if let Some(ref fp) = *guard {
-//         return HttpResponse::Ok().body(format!("prime modulus is {}\n", fp.prime));
-//     }
+    if let Some(ref fp) = *guard {
+        return Ok(HttpResponse::Ok().body(format!("prime modulus is {}\n", fp.prime)));
+    }
 
-//     HttpResponse::Conflict().body("no solver created yet\n")
-// }
+    Ok(HttpResponse::Conflict().body("no solver created yet\n"))
+}
 
 #[get("/solve")]
-async fn solve_discrete_logarithm(data: web::Json<Inputs>) -> Result<ShanksOutput, UserError> {
+async fn solve_discrete_logarithm_with_output(
+    data: web::Json<Inputs>,
+) -> Result<ShanksOutput, UserError> {
     // Get input from json
     let (prime, base, num) = (data.prime, data.base, data.num);
     // Check input is valid
@@ -150,8 +160,17 @@ async fn main() -> std::io::Result<()> {
     let address = "127.0.0.1";
     let port = 8080;
 
-    HttpServer::new(move || App::new().service(solve_discrete_logarithm))
-        .bind((address, port))?
-        .run()
-        .await
+    // Instantiate solver so it can be mutable between threads
+    let app_solver = web::Data::new(AppSolver::new());
+
+    HttpServer::new(move || {
+        App::new()
+            .app_data(app_solver.clone())
+            .service(new_solver)
+            .service(get_modulus)
+            .service(solve_discrete_logarithm_with_output)
+    })
+    .bind((address, port))?
+    .run()
+    .await
 }
