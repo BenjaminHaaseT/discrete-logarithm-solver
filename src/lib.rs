@@ -220,7 +220,7 @@ impl FpUnitsDiscLogSolver {
         &self,
         base: u32,
         num: u32,
-    ) -> (Option<u32>, HashMap<u32, i32>, HashMap<u32, i32>) {
+    ) -> (Option<u32>, u32, u32, HashMap<u32, i32>, HashMap<u32, i32>) {
         assert!(base % self.prime != 0 && num % self.prime != 0);
 
         // Compute order of base
@@ -251,7 +251,7 @@ impl FpUnitsDiscLogSolver {
             // Then check if we have a match in list1
             if let Some(x) = list1.get(&((num * u) % self.prime)) {
                 let res = x + (i * (n as i32));
-                return (Some(res as u32), list1, list2);
+                return (Some(res as u32), u, n, list1, list2);
             }
 
             // otherwise update u and proceed
@@ -260,7 +260,7 @@ impl FpUnitsDiscLogSolver {
         }
 
         // there is no discrete logarithm for the given base and num
-        (None, list1, list2)
+        (None, u, n, list1, list2)
     }
 
     // pub fn shanks_algorithm_with_lists
@@ -336,7 +336,7 @@ mod tests {
         let solver = FpUnitsDiscLogSolver::new(71);
         let base = 11;
         match solver.shanks_algorithm_with_output(base, 23) {
-            (Some(x), l1, l2) => {
+            (Some(x), _, _, l1, l2) => {
                 println!("list1: {:#?}", l1);
                 println!("list2: {:#?}", l2);
                 println!("log = {}", x);
@@ -344,7 +344,7 @@ mod tests {
 
                 assert_eq!(solver.fast_power(base, x), 23);
             }
-            (None, _l1, _l2) => panic!(),
+            (None, _, _, _l1, _l2) => panic!(),
             _ => panic!(),
         }
 
@@ -352,7 +352,7 @@ mod tests {
         let base = 9704;
 
         match solver.shanks_algorithm_with_output(base, 13896) {
-            (Some(x), l1, l2) => {
+            (Some(x), _, _, l1, l2) => {
                 println!("list1: {:#?}", l1);
                 println!("list2: {:#?}", l2);
                 println!("log = {}", x);
@@ -360,7 +360,7 @@ mod tests {
 
                 assert_eq!(solver.fast_power(base, x), 13896);
             }
-            (None, _l1, _l2) => panic!(),
+            (None, _, _, _l1, _l2) => panic!(),
             _ => panic!(),
         }
 

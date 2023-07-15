@@ -17,6 +17,12 @@ struct Inputs {
     num: u32,
 }
 
+#[derive(Debug, Deserialize)]
+struct SolverInputs {
+    base: u32,
+    num: u32,
+}
+
 #[derive(Serialize)]
 struct ShanksOutput {
     prime: u32,
@@ -120,10 +126,10 @@ async fn get_modulus(app_data: web::Data<AppSolver>) -> Result<HttpResponse, Use
 
 #[get("/solve")]
 async fn solve_discrete_logarithm_with_solver(
-    data: web::Query<(u32, u32)>,
+    data: web::Query<SolverInputs>,
     app_data: web::Data<AppSolver>,
 ) -> Result<HttpResponse, UserError> {
-    // First validate that we have an instantiated solver
+    // First get a lock on the mutex holding the solver
     let guard = if let Ok(guard_option) = app_data.as_ref().solver.lock() {
         guard_option
     } else {
@@ -137,7 +143,8 @@ async fn solve_discrete_logarithm_with_solver(
     };
 
     // Get data from payload and validate it
-    let (base, num) = data.0;
+    let inputs = data.into_inner();
+    let (base, num) = (inputs.base, inputs.num);
     if base % solver.prime == 0 {
         return Err(UserError::BadInput(format!(
             "{} is not a valid base since {} mod {} = 0",
@@ -158,6 +165,56 @@ async fn solve_discrete_logarithm_with_solver(
         "{} has not discrete logarithm with base {} modulo {}",
         num, base, solver.prime
     )))
+}
+
+#[get("/solve-with-output")]
+async fn solve_discrete_logarithm_with_solver_output(
+    data: web::Query<SolverInputs>,
+    app_data: web::Data<AppSolver>,
+) -> Result<ShanksOutput, UserError> {
+    // Get lock on the mutex holding the solver
+    let guard = if let Ok(guard_opt) = app_data.as_ref().solver.lock() {
+        guard_opt
+    } else {
+        return Err(UserError::InternalServer);
+    };
+
+    // Validate we have a solver insantiated
+    let solver = match guard.deref() {
+        Some(fp) => fp,
+        None => return Err(UserError::BadInput(String::from("no solver created"))),
+    };
+
+    // Validate data sent from client
+    let (base, num) = (data.base, data.num);
+    if base % solver.prime == 0 {
+        return Err(UserError::BadInput(format!(
+            "{} is not a valid base since {} mod {} = 0",
+            base, base, solver.prime
+        )));
+    } else if num % solver.prime == 0 {
+        return Err(UserError::BadInput(format!(
+            "no logarithm for {} with base {} since {} mod {} = 0",
+            num, base, num, solver.prime
+        )));
+    }
+
+    let (log, base_inverse, n, list1, list2) = match solver.shanks_algorithm_with_output(base, num)
+    {
+        (Some(x), inv, ord, l1, l2) => (x, inv, ord, l1, l2),
+        (None, inv, ord, l1, l2) => (0, inv, ord, l1, l2),
+    };
+
+    Ok(ShanksOutput {
+        prime: solver.prime,
+        base,
+        num,
+        n,
+        log,
+        base_inverse,
+        collision_list1: list1,
+        collision_list2: list2,
+    })
 }
 
 #[get("/solve")]
@@ -215,7 +272,9 @@ async fn main() -> std::io::Result<()> {
                 web::scope("/solver")
                     .app_data(app_solver.clone())
                     .service(new_solver)
-                    .service(get_modulus),
+                    .service(get_modulus)
+                    .service(solve_discrete_logarithm_with_solver)
+                    .service(solve_discrete_logarithm_with_solver_output),
             )
     })
     .bind((address, port))?
