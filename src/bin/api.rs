@@ -4,11 +4,9 @@ use actix_web::{
     http::{header::ContentType, StatusCode},
     post, web, App, HttpResponse, HttpServer, Responder,
 };
-use discrete_logarithm_lib::{is_prime, shanks_algorithm_with_output, FpUnitsDiscLogSolver};
+use discrete_logarithm_lib::{is_prime, FpUnitsDiscLogSolver};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::ops::Deref;
-use std::sync::Mutex;
 
 #[derive(Deserialize)]
 struct FpInputs {
@@ -17,11 +15,11 @@ struct FpInputs {
     num: u32,
 }
 
-#[derive(Debug, Deserialize)]
-struct SolverInputs {
-    base: u32,
-    num: u32,
-}
+// #[derive(Debug, Deserialize)]
+// struct SolverInputs {
+//     base: u32,
+//     num: u32,
+// }
 
 #[derive(Serialize)]
 struct ShanksOutput {
@@ -272,8 +270,8 @@ impl error::ResponseError for UserError {
 /// Returns an `HttpResponse::Ok()` if the discrete logarithm is found, otherwise it returns a `UserError::NoSolution`.
 /// It is up to the caller to determine what to do in the case where no solution exists.
 ///
-#[get("/solve")]
-async fn shanks_algorithm(info: web::Query<FpInputs>) -> Result<HttpResponse, UserError> {
+#[get("/shanks-algorithm")]
+async fn shanks_algorithm_handler(info: web::Query<FpInputs>) -> Result<HttpResponse, UserError> {
     let (prime, base, num) = (info.prime, info.base, info.num);
     // Validate prime number, base and num
     if !is_prime(prime) {
@@ -304,16 +302,69 @@ async fn shanks_algorithm(info: web::Query<FpInputs>) -> Result<HttpResponse, Us
     )))
 }
 
+/// Handler for solving the discrete logarithm using shanks algorithm that also returns the interesting details of the computation,
+///  e.g. the lists created when searching for a collision etc... as output via a `ShanksOutput`.
+#[get("/shanks-algorithm-with-output")]
+async fn shanks_algorithm_with_output_handler(
+    info: web::Query<FpInputs>,
+) -> Result<ShanksOutput, UserError> {
+    let (prime, base, num) = (info.prime, info.base, info.num);
+    // Validate the inputs
+    if !is_prime(prime) {
+        return Err(UserError::BadInput(format!(
+            "invalid input, {} is not prime",
+            prime
+        )));
+    } else if base % prime == 0 {
+        return Err(UserError::BadInput(format!(
+            "invalid input, {} is not a valid base since {} mod {} = 0",
+            base, base, prime
+        )));
+    } else if num % prime == 0 {
+        return Err(UserError::BadInput(format!(
+            "{} has no logarithm with base {} since {} mod {} = 0",
+            num, base, num, prime,
+        )));
+    }
+
+    let solver = FpUnitsDiscLogSolver::new(prime);
+
+    // perform computation
+    match solver.shanks_algorithm_with_output(base, num) {
+        (Some(log), u, n, collision_list1, collision_list2) => {
+            return Ok(ShanksOutput {
+                prime: solver.prime,
+                base,
+                num,
+                n,
+                log,
+                base_inverse: u,
+                collision_list1,
+                collision_list2,
+            });
+        }
+        (None, _u, _n, _collision_list1, _collision_list2) => {
+            return Err(UserError::NoSolution(format!(
+                "no solution for ({}, {})",
+                base, num
+            )));
+        }
+    }
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let address = "127.0.0.1";
     let port = 8080;
 
-    // Instantiate solver so it can be mutable between threads
-    let app_solver = web::Data::new(AppSolver::new());
-
-    HttpServer::new(move || App::new())
-        .bind((address, port))?
-        .run()
-        .await
+    HttpServer::new(|| {
+        App::new().service(
+            web::scope("/shanks")
+                .service(shanks_algorithm_handler)
+                .service(shanks_algorithm_with_output_handler),
+        )
+    })
+    .bind((address, port))?
+    .run()
+    .await
 }
