@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::error::Error;
 
+/// Simple function that uses a brute force technique to check if `p` is prime or not
+/// Returns true if `p` is prime, otherwise it returns false
 pub fn is_prime(p: u32) -> bool {
     for i in 2..=(p / 2) {
         if p % i == 0 {
@@ -8,6 +10,49 @@ pub fn is_prime(p: u32) -> bool {
         }
     }
     true
+}
+
+/// Function that uses the seives algorithm for computing all primes up to and including a given input `n`.
+pub fn compute_primes(n: u32) -> Vec<u32> {
+    let mut primes = vec![true; (n + 1) as usize];
+    let mut curr = 2_u32;
+
+    while curr <= n {
+        if primes[curr as usize] {
+            let multiples = (curr * 2..=curr * (n / curr)).step_by(curr as usize);
+            for multiple in multiples {
+                primes[multiple as usize] = false;
+            }
+        }
+        curr += 1;
+    }
+
+    primes
+        .into_iter()
+        .enumerate()
+        .filter(|(i, b)| *i != 0 && *i != 1 && *b)
+        .map(|(i, _)| i as u32)
+        .collect()
+}
+
+/// Simple function that uses brute force to attempt a factorization of `n`
+/// returns a vector of (prime, exponent) where prime is the prime factor and exponent is the highest power of that prime that divides n
+pub fn factor(mut n: u32) -> Vec<(u32, u32)> {
+    let potential_prime_factors = compute_primes(n / 2);
+    let mut result = vec![];
+    for factor in potential_prime_factors {
+        if factor > n {
+            break;
+        } else if n % factor == 0 {
+            let mut exp = 0;
+            while n % factor == 0 && n > 0 {
+                n /= factor;
+                exp += 1;
+            }
+            result.push((factor, exp));
+        }
+    }
+    result
 }
 
 /// Function that implements the fast powering algorithm. Takes `prime` a prime, `g` a base and `exp` an exponent that we would
@@ -137,16 +182,23 @@ pub fn shanks_algorithm_with_output(
     (None, base_inverse, n, list1, list2)
 }
 
+/// A struct that encapsulates all the necessary functions for solving the discrete logarithm in the group of units from the field Fp.
+/// A `FpUnitsDiscLogSolver` may be preferable in many cases since only one check is required at initialization to ensure the modulus is prime,
+/// where as, many repeated checks that the modulus is prime will be needed if using only the functions declared in this module
 pub struct FpUnitsDiscLogSolver {
     pub prime: u32,
 }
 
 impl FpUnitsDiscLogSolver {
+    /// Create a new `FpUnitsDiscLogSolver`, will panic if `p` is not prime.
     pub fn new(p: u32) -> Self {
         assert!(is_prime(p));
         FpUnitsDiscLogSolver { prime: p }
     }
 
+    /// Performs the fast power algorithm for computing a base raised to an exponenet in the group of units from Fp.
+    /// In this method the parameter `g` is the base and `exp` is the power we wish to raise `g` to.
+    /// The method panics if `g` % self.prime == 0, since in this case `g` is not in the group of units to begin with.
     pub fn fast_power(&self, mut g: u32, mut exp: u32) -> u32 {
         assert!(g % self.prime != 0);
         let mut result = 1;
@@ -163,11 +215,15 @@ impl FpUnitsDiscLogSolver {
         result
     }
 
+    /// Computes the inverse of a given element `g` from the group of units in Fp.
+    /// Method will panic if `g` % self.prime == 0, since in this case `g` is not in the group of units to begin with.
     pub fn compute_inverse(&self, g: u32) -> u32 {
         assert!(g % self.prime != 0);
         self.fast_power(g, self.prime - 2)
     }
 
+    /// Computes the order of a given element `g` from the group of units in Fp.
+    /// Method will panic if `g` % self.prime == 0, since in this case `g` is not in the group of units to begin with.
     pub fn compute_order(&self, g: u32) -> u32 {
         assert!(g % self.prime != 0);
         let mut g = g;
@@ -181,6 +237,9 @@ impl FpUnitsDiscLogSolver {
         n
     }
 
+    /// Attempts to solve the discrete logarithm problem. `num` is the value whose logarithm we are trying to find with the given `base`.
+    /// If the discrete logarithm exists, a `Some(u32)` will be returned, otherwise `None` will be returned.
+    /// Method will panic if `base` % self.prime == 0 or `num` % self.prime == 0, since in this case either `base` or `num` is not in the group of units to begin with.
     pub fn shanks_algorithm(&self, base: u32, num: u32) -> Option<u32> {
         assert!(base % self.prime != 0 && num % self.prime != 0);
         // First compute order of base
@@ -216,6 +275,10 @@ impl FpUnitsDiscLogSolver {
         None
     }
 
+    /// Attempts to solve the discrete logarithm problem. `num` is the value whose logarithm we are trying to find with the given `base`.
+    /// This method also returns the data that may be of interest to some that was generated during the algorithm in an attempt to find the logarithm, eg the list of elements that were generated when trying to find a collision, etc...
+    /// If the discrete logarithm exists, a `Some(u32)` will be returned, otherwise `None` will be returned in the tuple containing all of the outputs.
+    /// Method will panic if `base` % self.prime == 0 or `num` % self.prime == 0, since in this case either `base` or `num` is not in the group of units to begin with.
     pub fn shanks_algorithm_with_output(
         &self,
         base: u32,
@@ -263,7 +326,17 @@ impl FpUnitsDiscLogSolver {
         (None, u, n, list1, list2)
     }
 
-    // pub fn shanks_algorithm_with_lists
+    /// A method for computing the discrete logarithm using Pollhig-Hellman algorithm.
+    /// Method will panic if `base` % self.prime == 0 or `num` % self.prime == 0, since in this case either `base` or `num` is not in the group of units to begin with.
+    pub fn pollhig_hellman(&self, base: u32, num: u32) -> Option<u32> {
+        assert!(base % self.prime != 0 && num % self.prime != 0);
+
+        // First compute order of base
+        let order = self.compute_order(base);
+        // let prime_powers = factor(order);
+
+        None
+    }
 }
 
 #[cfg(test)]
@@ -364,6 +437,25 @@ mod tests {
             _ => panic!(),
         }
 
+        assert!(true);
+    }
+
+    #[test]
+    fn test_compute_primes() {
+        let prime = 31_u32;
+        assert_eq!(
+            vec![2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31],
+            compute_primes(prime)
+        );
+        assert_eq!(
+            vec![2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31],
+            compute_primes(32)
+        );
+
+        println!("{:?}", compute_primes(32));
+        println!("{:?}", compute_primes(1000));
+
+        // tests passed
         assert!(true);
     }
 }
