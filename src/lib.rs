@@ -37,8 +37,8 @@ pub fn compute_primes(n: u32) -> Vec<u32> {
 
 /// Simple function that uses brute force to attempt a factorization of `n`
 /// returns a vector of (prime, exponent) where prime is the prime factor and exponent is the highest power of that prime that divides n
-pub fn factor(mut n: u32) -> Vec<(u32, u32)> {
-    let potential_prime_factors = compute_primes(n / 2);
+pub fn factor(mut n: u32) -> Vec<(u32, u32, u32)> {
+    let potential_prime_factors = PrimeGenerator::new(n / 2);
     let mut result = vec![];
     for factor in potential_prime_factors {
         if factor > n {
@@ -49,7 +49,7 @@ pub fn factor(mut n: u32) -> Vec<(u32, u32)> {
                 n /= factor;
                 exp += 1;
             }
-            result.push((factor, exp));
+            result.push((factor, exp, u32::pow(factor, exp)));
         }
     }
     result
@@ -180,6 +180,44 @@ pub fn shanks_algorithm_with_output(
 
     // there is no discrete logarithm for the given base and num
     (None, base_inverse, n, list1, list2)
+}
+
+/// A struct that will generate prime numbers that will generate prime numbers up to and including some final number.
+pub struct PrimeGenerator {
+    n: u32,
+    primes: Vec<bool>,
+    curr: u32,
+}
+
+impl PrimeGenerator {
+    /// Creates a new `PrimeGenerator`
+    pub fn new(n: u32) -> Self {
+        let primes = vec![true; (n + 1) as usize];
+        let curr = 2_u32;
+        PrimeGenerator { n, primes, curr }
+    }
+}
+
+impl std::iter::Iterator for PrimeGenerator {
+    type Item = u32;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while self.curr <= self.n {
+            if self.primes[self.curr as usize] {
+                let multiples =
+                    (self.curr * 2..=self.curr * (self.n / self.curr)).step_by(self.curr as usize);
+                for multiple in multiples {
+                    self.primes[multiple as usize] = false;
+                }
+                let res = self.curr;
+                self.curr += 1;
+                return Some(res);
+            } else {
+                self.curr += 1;
+            }
+        }
+        None
+    }
 }
 
 /// A struct that encapsulates all the necessary functions for solving the discrete logarithm in the group of units from the field Fp.
@@ -326,6 +364,32 @@ impl FpUnitsDiscLogSolver {
         (None, u, n, list1, list2)
     }
 
+    /// A method that will solve the discrete logarithm where the modulus is a prime power.
+    /// Can be called as a stand alone function or as a helper method.
+    pub fn solve_prime_power(&self, base: u32, num: u32, prime: u32, exp: u32) -> Option<u32> {
+        let mut x = 0;
+        let mut u = 1;
+        let mut v = u32::pow(prime, exp - 1);
+        // let b = u32::pow(base, u32::pow(prime, v));
+        let b = self.fast_power(base, v);
+
+        for _i in 0..exp {
+            let curr_inverse = self.compute_inverse(self.fast_power(base, x));
+            if let Some(x_i) =
+                self.shanks_algorithm(b, self.fast_power((num * curr_inverse) % self.prime, v))
+            {
+                x += x_i * u;
+                x %= u32::pow(prime, exp);
+                u *= prime;
+                v /= prime;
+            } else {
+                return None;
+            }
+        }
+
+        Some(x)
+    }
+
     /// A method for computing the discrete logarithm using Pollhig-Hellman algorithm.
     /// Method will panic if `base` % self.prime == 0 or `num` % self.prime == 0, since in this case either `base` or `num` is not in the group of units to begin with.
     pub fn pollhig_hellman(&self, base: u32, num: u32) -> Option<u32> {
@@ -333,8 +397,24 @@ impl FpUnitsDiscLogSolver {
 
         // First compute order of base
         let order = self.compute_order(base);
-        // let prime_powers = factor(order);
 
+        // Compute prime powers of order
+        let prime_powers = factor(order);
+        let mut solutions = vec![];
+
+        for (prime, power, prime_power) in prime_powers {
+            solutions.push((
+                self.solve_prime_power(
+                    u32::pow(base, order / prime_power),
+                    u32::pow(num, order / prime_power),
+                    prime,
+                    power,
+                ),
+                prime_power,
+            ));
+        }
+
+        // Use chinese remainder theorm to solve the simulataneous system of congruents
         None
     }
 }
@@ -457,5 +537,34 @@ mod tests {
 
         // tests passed
         assert!(true);
+    }
+
+    #[test]
+    fn test_prime_generator() {
+        let prime_generator = PrimeGenerator::new(1000);
+
+        assert_eq!(prime_generator.collect::<Vec<u32>>(), compute_primes(1000));
+    }
+
+    #[test]
+    fn test_factor() {
+        let N = 2 * 2 * 28 * 3 * 7 * 15 * 9;
+        println!("{N}");
+        let factors = factor(N as u32);
+        println!("{:?}", factors);
+
+        assert_eq!(vec![(2, 4, 16), (3, 4, 81), (5, 1, 5), (7, 2, 49)], factors);
+    }
+
+    #[test]
+    fn test_solve_prime_power() {
+        let solver = FpUnitsDiscLogSolver::new(11251);
+        if let Some(x) = solver.solve_prime_power(5448, 6909, 5, 4) {
+            println!("{x}");
+            assert!(x % 11251 == 511);
+        } else {
+            println!("panicing returned None");
+            panic!();
+        }
     }
 }
