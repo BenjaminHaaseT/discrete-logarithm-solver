@@ -57,7 +57,7 @@ pub fn factor(mut n: u32) -> Vec<(u32, u32, u32)> {
 
 /// Function that implements the fast powering algorithm. Takes `prime` a prime, `g` a base and `exp` an exponent that we would
 /// like to raise `g` to the power of. The return value is `g` raised to `exp` modulo `prime`, the function panics if `prime` is not prime.
-pub fn fast_power(prime: u32, mut g: u32, mut exp: u32) -> u32 {
+pub fn fast_power_fp(prime: u32, mut g: u32, mut exp: u32) -> u32 {
     assert!(is_prime(prime));
     let mut result = 1;
     while exp > 0 {
@@ -73,16 +73,128 @@ pub fn fast_power(prime: u32, mut g: u32, mut exp: u32) -> u32 {
     result
 }
 
+/// Funciton that implements the fast power algorithm for any `g` raised to the power `e` with modulus `m`.
+pub fn fast_power(m: u32, mut g: u32, mut exp: u32) -> u32 {
+    if g == 0 {
+        return 0;
+    }
+    let mut result = 1;
+
+    while exp > 0 {
+        if exp % 2 == 1 {
+            result *= g;
+            result %= m;
+        }
+
+        g *= g;
+        g %= m;
+        exp /= 2;
+    }
+
+    result
+}
+
+/// Simple function to compute the greatest common divisor of a pair of integers.
+/// The method panices if both of `a` and `b` are equal to zero, since in this case the greatest common divisor in undefined.
+pub fn gcd(mut a: u32, mut b: u32) -> u32 {
+    assert!(!(a == 0 && b == 0));
+    let mut r = a % b;
+    while r > 0 {
+        a = b;
+        b = r;
+        r = a % b;
+    }
+    b
+}
+
 /// Function that will compute the multiplicative inverse of a given integer `g` modulo `prime` where `prime` must be a prime.
 /// The function will panic if `prime` is not prime or if `prime` divides `g`.
-pub fn compute_inverse(prime: u32, g: u32) -> u32 {
+pub fn compute_inverse_fp(prime: u32, g: u32) -> u32 {
     assert!(is_prime(prime) && g % prime != 0);
     fast_power(prime, g, prime - 2)
 }
 
+/// Function that will compute the inverse of `a` modulo `b`. Function returns an Option<u32>, the some variant if the inverse exists otherwise it returns None.
+pub fn compute_inverse_mod_n(a: u32, b: u32) -> Option<u32> {
+    let mut table = vec![(0, 1), (1, 0)];
+    let mut curr_a = a;
+    let mut curr_b = b;
+    // let idx = 1;
+    let mut q = curr_a / curr_b;
+    let mut r = curr_a % curr_b;
+    let mut i = 1;
+
+    while r > 0 {
+        let (u1, u2) = (table[i - 1].0, table[i].0);
+        let (v1, v2) = (table[i - 1].1, table[i].1);
+        let curr_u = u2 * q + u1;
+        let curr_v = v2 * q + v1;
+        table.push((curr_u, curr_v));
+        curr_a = curr_b;
+        curr_b = r;
+        q = curr_a / curr_b;
+        r = curr_a % curr_b;
+        i += 1;
+    }
+    if curr_b == 1 {
+        let (mut u, mut v) = table[table.len() - 1];
+
+        if let (Some(x), Some(y)) = (a.checked_mul(u), b.checked_mul(v)) {
+            match x.checked_add(y) {
+                Some(res) if res == 1 => return Some(u % b),
+                _ => {}
+            }
+            match x.checked_sub(y) {
+                Some(res) if res == 1 => return Some(u % b),
+                _ => {}
+            }
+            match y.checked_sub(x) {
+                Some(res) if res == 1 => {
+                    u %= b;
+                    return Some(b - u);
+                }
+                _ => {}
+            }
+        };
+
+        if let (Some(x), Some(y)) = (a.checked_mul(v), b.checked_mul(u)) {
+            match x.checked_add(y) {
+                Some(res) if res == 1 => return Some(v % b),
+                _ => {}
+            }
+            match x.checked_sub(y) {
+                Some(res) if res == 1 => return Some(v % b),
+                _ => {}
+            }
+            match y.checked_sub(x) {
+                Some(res) if res == 1 => {
+                    v %= b;
+                    return Some(b - v);
+                }
+                _ => {}
+            }
+        };
+    }
+
+    None
+}
+
+/// Computes the order of `m1` in the group of units from the ring quotient ring Z/(`m2`).
+pub fn compute_order(mut m1: u32, m2: u32) -> u32 {
+    assert!(gcd(m1, m2) == 1);
+    let base = m1;
+    let mut n = 1;
+    while m1 != 1 {
+        m1 *= base;
+        m1 %= m2;
+        n += 1;
+    }
+    n
+}
+
 /// Function that will compute the order of an integer `g` in the group of units from the field Fp, where p is the prime `prime`.
 /// The funciton will panic if `prime` is not prime or `prime` divides `g`.
-pub fn compute_order(prime: u32, mut g: u32) -> u32 {
+pub fn compute_order_fp(prime: u32, mut g: u32) -> u32 {
     assert!(is_prime(prime) && g % prime != 0);
     let base = g;
     let mut n = 1;
@@ -116,7 +228,7 @@ pub fn shanks_algorithm(prime: u32, g: u32, num: u32) -> Option<u32> {
 
     // Now compute second list, we don't actually need to allocate any memory for this only set up variables
     let mut u = 1;
-    let prod_inverse = compute_inverse(prime, prod);
+    let prod_inverse = compute_inverse_fp(prime, prod);
 
     for i in 0..=(n as i32) {
         // Check if we have a match
@@ -162,7 +274,7 @@ pub fn shanks_algorithm_with_output(
     // Now compute the inverse of base^n, note g = base^n from our previous computation
     let mut list2 = HashMap::new();
     let mut u = 1;
-    let base_inverse = compute_inverse(prime, prod);
+    let base_inverse = compute_inverse_fp(prime, prod);
 
     for i in 0..=(n as i32) {
         // First always insert into list2
@@ -181,6 +293,16 @@ pub fn shanks_algorithm_with_output(
     // there is no discrete logarithm for the given base and num
     (None, base_inverse, n, list1, list2)
 }
+
+/// A function that will solve a simultaneous system of congruences using the chinese remainder theorem.
+/// Returns an Option<u32>. The return value is some if a solutione exists, otherwise it will return None
+// pub fn solve_congruences(congruences: Vec<(u32, u32)>) -> Option<u32> {
+//     let (mut x, mut m) = (congruences[0].0, congruences[0].1);
+//     for i in 1..congruences.len() {
+//         let (a_i, m_i) = congruences[i];
+//         let y = (a_i - x) * compute_inverse
+//     }
+// }
 
 /// A struct that will generate prime numbers that will generate prime numbers up to and including some final number.
 pub struct PrimeGenerator {
@@ -403,15 +525,16 @@ impl FpUnitsDiscLogSolver {
         let mut solutions = vec![];
 
         for (prime, power, prime_power) in prime_powers {
-            solutions.push((
-                self.solve_prime_power(
-                    u32::pow(base, order / prime_power),
-                    u32::pow(num, order / prime_power),
-                    prime,
-                    power,
-                ),
-                prime_power,
-            ));
+            if let Some(x) = self.solve_prime_power(
+                self.fast_power(base, order / prime_power),
+                self.fast_power(num, order / prime_power),
+                prime,
+                power,
+            ) {
+                solutions.push((x, prime_power));
+            } else {
+                return None;
+            }
         }
 
         // Use chinese remainder theorm to solve the simulataneous system of congruents
@@ -566,5 +689,45 @@ mod tests {
             println!("panicing returned None");
             panic!();
         }
+    }
+
+    #[test]
+    fn test_compute_inverse_mod_n() {
+        let a = 73_u32;
+        let b = 25_u32;
+
+        if let Some(u) = compute_inverse_mod_n(a, b) {
+            println!("{u}");
+            // println!("{}", a * u + b * v);
+            // println!("{}", a * u - b * v);
+            // println!("{}", a * v + b * u);
+            // println!("{}", a * v - b * u);
+        } else {
+            // panic!();
+        }
+
+        let a = 67;
+        let b = 71;
+
+        if let Some(u) = compute_inverse_mod_n(a, b) {
+            println!("{u}");
+            // println!("{}", a * u + b * v);
+            // println!("{}", a * u - b * v);
+            // println!("{}", a * v + b * u);
+            // println!("{}", a * v - b * u);
+        }
+
+        let a = 101;
+        let b = 746497 * 71;
+
+        if let Some(u) = compute_inverse_mod_n(a, b) {
+            println!("{u}");
+        }
+
+        if let Some(u) = compute_inverse_mod_n(b, a) {
+            println!("{u}");
+        }
+
+        assert!(true);
     }
 }
