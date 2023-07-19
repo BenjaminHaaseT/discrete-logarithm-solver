@@ -559,7 +559,7 @@ impl FpUnitsDiscLogSolver {
 
         // Use chinese remainder theorm to solve the simulataneous system of congruents
         match solve_congruences(prime_pow_solution_congruences) {
-            Some(sol) => Some(sol),
+            Some(sol) => Some(sol % self.prime),
             _ => None,
         }
     }
@@ -770,6 +770,43 @@ mod tests {
         if let Some(solution) = solve_congruences(congruences.clone()) {
             println!("{:?}", solution);
             assert!(congruences.iter().all(|(a, m)| solution % m == *a));
+        }
+    }
+
+    #[test]
+    fn test_pollhig_hellman() {
+        let prime = 11251;
+        let g = 23;
+        let h = 9689;
+        let solver = FpUnitsDiscLogSolver::new(prime);
+        if let Some(x) = solver.pollhig_hellman(g, h) {
+            println!("{x}");
+
+            assert_eq!(solver.fast_power(g, x), h);
+        }
+
+        let prime = 71;
+        let g = 11;
+        let h = 21;
+        let solver = FpUnitsDiscLogSolver::new(prime);
+        if let Some(x) = solver.pollhig_hellman(g, h) {
+            println!("{x}");
+        }
+
+        let prime = 593;
+        let g = 156;
+        let h = 116;
+        let solver = FpUnitsDiscLogSolver::new(prime);
+        if let Some(x) = solver.pollhig_hellman(g, h) {
+            println!("{x}");
+        }
+
+        let prime = 3571;
+        let g = 650;
+        let h = 2213;
+        let solver = FpUnitsDiscLogSolver::new(prime);
+        if let Some(x) = solver.pollhig_hellman(g, h) {
+            println!("{x}");
         }
     }
 }
