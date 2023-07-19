@@ -116,10 +116,11 @@ pub fn compute_inverse_fp(prime: u32, g: u32) -> u32 {
 
 /// Function that will compute the inverse of `a` modulo `b`. Function returns an Option<u32>, the some variant if the inverse exists otherwise it returns None.
 pub fn compute_inverse_mod_n(a: u32, b: u32) -> Option<u32> {
+    // Table to build up answer
     let mut table = vec![(0, 1), (1, 0)];
     let mut curr_a = a;
     let mut curr_b = b;
-    // let idx = 1;
+
     let mut q = curr_a / curr_b;
     let mut r = curr_a % curr_b;
     let mut i = 1;
@@ -136,6 +137,8 @@ pub fn compute_inverse_mod_n(a: u32, b: u32) -> Option<u32> {
         r = curr_a % curr_b;
         i += 1;
     }
+    // Check all possible solutions, if curr_b == 1 then the algorithm must have computed
+    //a valid solution that we can use to compute the inverse of a modulo b
     if curr_b == 1 {
         let (mut u, mut v) = table[table.len() - 1];
 
@@ -296,13 +299,33 @@ pub fn shanks_algorithm_with_output(
 
 /// A function that will solve a simultaneous system of congruences using the chinese remainder theorem.
 /// Returns an Option<u32>. The return value is some if a solutione exists, otherwise it will return None
-// pub fn solve_congruences(congruences: Vec<(u32, u32)>) -> Option<u32> {
-//     let (mut x, mut m) = (congruences[0].0, congruences[0].1);
-//     for i in 1..congruences.len() {
-//         let (a_i, m_i) = congruences[i];
-//         let y = (a_i - x) * compute_inverse
-//     }
-// }
+pub fn solve_congruences(congruences: Vec<(u32, u32)>) -> Option<u32> {
+    let (mut x, mut m) = (congruences[0].0, congruences[0].1);
+    for i in 1..congruences.len() {
+        let (a_i, m_i) = congruences[i];
+        let y = if let Some(m_inv) = compute_inverse_mod_n(m, m_i) {
+            // if x > a_i {
+            //     ((x - a_i) * m_inv) % m_i
+            // } else {
+            //     ((a_i - x) * m_inv) % m_i
+            // }
+            let temp_x = x % m_i;
+            if temp_x > a_i {
+                ((a_i + (m_i - temp_x)) * m_inv) % m_i
+            } else {
+                ((a_i - temp_x) * m_inv) % m_i
+            }
+        } else {
+            // Otherwise no solution exists for this system of congruences
+            return None;
+        };
+        let x_ = ((m * y) % (m * m_i)) + (x % (m * m_i));
+        x = x_;
+        m *= m_i;
+    }
+
+    Some(x % m)
+}
 
 /// A struct that will generate prime numbers that will generate prime numbers up to and including some final number.
 pub struct PrimeGenerator {
@@ -698,10 +721,6 @@ mod tests {
 
         if let Some(u) = compute_inverse_mod_n(a, b) {
             println!("{u}");
-            // println!("{}", a * u + b * v);
-            // println!("{}", a * u - b * v);
-            // println!("{}", a * v + b * u);
-            // println!("{}", a * v - b * u);
         } else {
             // panic!();
         }
@@ -711,10 +730,6 @@ mod tests {
 
         if let Some(u) = compute_inverse_mod_n(a, b) {
             println!("{u}");
-            // println!("{}", a * u + b * v);
-            // println!("{}", a * u - b * v);
-            // println!("{}", a * v + b * u);
-            // println!("{}", a * v - b * u);
         }
 
         let a = 101;
@@ -729,5 +744,32 @@ mod tests {
         }
 
         assert!(true);
+    }
+
+    #[test]
+    fn test_solve_congruences() {
+        let congruences = vec![(2, 3), (3, 5), (2, 7)];
+        if let Some(solution) = solve_congruences(congruences.clone()) {
+            println!("{:?}", solution);
+            assert!(congruences.iter().all(|(a, m)| solution % m == *a));
+        }
+
+        let congruences = vec![(2, 3), (3, 7), (4, 16)];
+        if let Some(solution) = solve_congruences(congruences.clone()) {
+            println!("{:?}", solution);
+            assert!(congruences.iter().all(|(a, m)| solution % m == *a));
+        }
+
+        let congruences = vec![(37, 43), (22, 49), (18, 71)];
+        if let Some(solution) = solve_congruences(congruences.clone()) {
+            println!("{:?}", solution);
+            assert!(congruences.iter().all(|(a, m)| solution % m == *a));
+        }
+
+        let congruences = vec![(37, 43), (22, 49), (18, 71), (93, 101), (75, 97)];
+        if let Some(solution) = solve_congruences(congruences.clone()) {
+            println!("{:?}", solution);
+            assert!(congruences.iter().all(|(a, m)| solution % m == *a));
+        }
     }
 }
