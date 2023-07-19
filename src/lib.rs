@@ -304,11 +304,6 @@ pub fn solve_congruences(congruences: Vec<(u32, u32)>) -> Option<u32> {
     for i in 1..congruences.len() {
         let (a_i, m_i) = congruences[i];
         let y = if let Some(m_inv) = compute_inverse_mod_n(m, m_i) {
-            // if x > a_i {
-            //     ((x - a_i) * m_inv) % m_i
-            // } else {
-            //     ((a_i - x) * m_inv) % m_i
-            // }
             let temp_x = x % m_i;
             if temp_x > a_i {
                 ((a_i + (m_i - temp_x)) * m_inv) % m_i
@@ -545,23 +540,28 @@ impl FpUnitsDiscLogSolver {
 
         // Compute prime powers of order
         let prime_powers = factor(order);
-        let mut solutions = vec![];
+        let mut prime_pow_solution_congruences = vec![];
 
         for (prime, power, prime_power) in prime_powers {
-            if let Some(x) = self.solve_prime_power(
+            // Build the system of congruences, where each modulus is a prime power factor of the order of the given base `g`
+            if let Some(y) = self.solve_prime_power(
                 self.fast_power(base, order / prime_power),
                 self.fast_power(num, order / prime_power),
                 prime,
                 power,
             ) {
-                solutions.push((x, prime_power));
+                prime_pow_solution_congruences.push((y, prime_power));
             } else {
+                // Has no solution
                 return None;
             }
         }
 
         // Use chinese remainder theorm to solve the simulataneous system of congruents
-        None
+        match solve_congruences(prime_pow_solution_congruences) {
+            Some(sol) => Some(sol),
+            _ => None,
+        }
     }
 }
 
