@@ -1,0 +1,4 @@
+
+-Add a method that saves accumulated output in a struct for api usage
+-Add Pollhig-Hellman to api backend
+-Add frontend for animating solving the discrete logarithm problem using Pollhig-Hellman/Shanks 

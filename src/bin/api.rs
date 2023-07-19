@@ -157,6 +157,39 @@ async fn shanks_algorithm_with_output_handler(
     }
 }
 
+#[get("/pollhig-hellman")]
+async fn pollhig_hellman_handler(input: web::Query<FpInputs>) -> Result<HttpResponse, UserError> {
+    // Validate inputs first
+    let (prime, base, num) = (input.prime, input.base, input.num);
+
+    if !is_prime(prime) {
+        return Err(UserError::BadInput(format!(
+            "invalid input, {} is not prime",
+            prime
+        )));
+    } else if base % prime == 0 {
+        return Err(UserError::BadInput(format!(
+            "invalid input, {} is not a valid base since {} mod {} = 0",
+            base, base, prime
+        )));
+    } else if num % prime == 0 {
+        return Err(UserError::BadInput(format!(
+            "no solution since {} mod {} = 0",
+            num, prime
+        )));
+    }
+
+    let solver = FpUnitsDiscLogSolver::new(prime);
+
+    if let Some(solution) = solver.pollhig_hellman(base, num) {
+        return Ok(HttpResponse::Ok().body(solution.to_string()));
+    }
+
+    Err(UserError::NoSolution(String::from(
+        "no solution for given inputs",
+    )))
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let address = "127.0.0.1";

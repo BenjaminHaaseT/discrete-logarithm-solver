@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 use std::error::Error;
+use std::marker::{Send, Sync};
+use std::thread;
 
 /// Simple function that uses a brute force technique to check if `p` is prime or not
 /// Returns true if `p` is prime, otherwise it returns false
@@ -363,6 +365,7 @@ impl std::iter::Iterator for PrimeGenerator {
 /// A struct that encapsulates all the necessary functions for solving the discrete logarithm in the group of units from the field Fp.
 /// A `FpUnitsDiscLogSolver` may be preferable in many cases since only one check is required at initialization to ensure the modulus is prime,
 /// where as, many repeated checks that the modulus is prime will be needed if using only the functions declared in this module
+#[derive(Clone, Copy)]
 pub struct FpUnitsDiscLogSolver {
     pub prime: u32,
 }
@@ -780,7 +783,12 @@ mod tests {
         let h = 9689;
         let solver = FpUnitsDiscLogSolver::new(prime);
         if let Some(x) = solver.pollhig_hellman(g, h) {
-            println!("{x}");
+            println!(
+                "{} ^ {x} = {} mod {}",
+                g,
+                solver.fast_power(g, x),
+                solver.prime
+            );
 
             assert_eq!(solver.fast_power(g, x), h);
         }
@@ -791,6 +799,14 @@ mod tests {
         let solver = FpUnitsDiscLogSolver::new(prime);
         if let Some(x) = solver.pollhig_hellman(g, h) {
             println!("{x}");
+            println!(
+                "{} ^ {x} = {} mod {}",
+                g,
+                solver.fast_power(g, x),
+                solver.prime
+            );
+
+            assert_eq!(solver.fast_power(g, x), h);
         }
 
         let prime = 593;
@@ -799,6 +815,14 @@ mod tests {
         let solver = FpUnitsDiscLogSolver::new(prime);
         if let Some(x) = solver.pollhig_hellman(g, h) {
             println!("{x}");
+            println!(
+                "{} ^ {x} = {} mod {}",
+                g,
+                solver.fast_power(g, x),
+                solver.prime
+            );
+
+            assert_eq!(solver.fast_power(g, x), h);
         }
 
         let prime = 3571;
@@ -807,6 +831,14 @@ mod tests {
         let solver = FpUnitsDiscLogSolver::new(prime);
         if let Some(x) = solver.pollhig_hellman(g, h) {
             println!("{x}");
+            println!(
+                "{} ^ {x} = {} mod {}",
+                g,
+                solver.fast_power(g, x),
+                solver.prime
+            );
+
+            assert_eq!(solver.fast_power(g, x), h);
         }
     }
 }
