@@ -59,8 +59,15 @@ pub fn factor(mut n: u32) -> Vec<(u32, u32, u32)> {
 
 /// Function that implements the fast powering algorithm. Takes `prime` a prime, `g` a base and `exp` an exponent that we would
 /// like to raise `g` to the power of. The return value is `g` raised to `exp` modulo `prime`, the function panics if `prime` is not prime.
-pub fn fast_power_fp(prime: u32, mut g: u32, mut exp: u32) -> u32 {
+pub fn fast_power_fp(prime: u32, g: u32, exp: u32) -> u32 {
     assert!(is_prime(prime));
+    fast_power_fp_unchecked(prime, g, exp)
+}
+
+/// Function that implements the fast powering algorithm. Takes `prime` a prime, `g` a base and `exp` an exponent that we would
+/// like to raise `g` to the power of. The return value is `g` raised to `exp` modulo `prime`,
+/// the function is unchecked, so it will not panic if `prime` is not actually a prime.
+pub fn fast_power_fp_unchecked(prime: u32, mut g: u32, mut exp: u32) -> u32 {
     let mut result = 1;
     while exp > 0 {
         if exp % 2 == 1 {
@@ -100,6 +107,12 @@ pub fn fast_power(m: u32, mut g: u32, mut exp: u32) -> u32 {
 /// The method panices if both of `a` and `b` are equal to zero, since in this case the greatest common divisor in undefined.
 pub fn gcd(mut a: u32, mut b: u32) -> u32 {
     assert!(!(a == 0 && b == 0));
+    gcd_unchecked(a, b)
+}
+
+/// Simple function to compute the greatest common divisor of a pair of integers.
+/// The funciton does not panic if both `a` == 0 and `b` == 0 since it is unchecked.
+pub fn gcd_unchecked(mut a: u32, mut b: u32) -> u32 {
     let mut r = a % b;
     while r > 0 {
         a = b;
@@ -113,7 +126,13 @@ pub fn gcd(mut a: u32, mut b: u32) -> u32 {
 /// The function will panic if `prime` is not prime or if `prime` divides `g`.
 pub fn compute_inverse_fp(prime: u32, g: u32) -> u32 {
     assert!(is_prime(prime) && g % prime != 0);
-    fast_power(prime, g, prime - 2)
+    fast_power_fp_unchecked(prime, g, prime - 2)
+}
+
+/// Function that will compute the multiplicative inverse of a given integer `g` modulo `prime` where `prime` must be a prime.
+/// The function does not check whether `prime` is actually a prime or not.
+pub fn compute_inverse_fp_unchecked(prime: u32, g: u32) -> u32 {
+    fast_power_fp_unchecked(prime, g, prime - 2)
 }
 
 /// Function that will compute the inverse of `a` modulo `b`. Function returns an Option<u32>, the some variant if the inverse exists otherwise it returns None.
@@ -185,8 +204,14 @@ pub fn compute_inverse_mod_n(a: u32, b: u32) -> Option<u32> {
 }
 
 /// Computes the order of `m1` in the group of units from the ring quotient ring Z/(`m2`).
-pub fn compute_order(mut m1: u32, m2: u32) -> u32 {
+pub fn compute_order(m1: u32, m2: u32) -> u32 {
     assert!(gcd(m1, m2) == 1);
+    compute_order_unchecked(m1, m2)
+}
+
+/// Computes the order of `m1` in the group of units from the ring quotient ring Z/(`m2`).
+/// The funciton is unchecked and therefore does not bother to check if `m1` and `m2` are relatively prime.
+pub fn compute_order_unchecked(mut m1: u32, m2: u32) -> u32 {
     let base = m1;
     let mut n = 1;
     while m1 != 1 {
@@ -199,8 +224,14 @@ pub fn compute_order(mut m1: u32, m2: u32) -> u32 {
 
 /// Function that will compute the order of an integer `g` in the group of units from the field Fp, where p is the prime `prime`.
 /// The funciton will panic if `prime` is not prime or `prime` divides `g`.
-pub fn compute_order_fp(prime: u32, mut g: u32) -> u32 {
+pub fn compute_order_fp(prime: u32, g: u32) -> u32 {
     assert!(is_prime(prime) && g % prime != 0);
+    compute_order_fp_unchecked(prime, g)
+}
+
+/// Function that will compute the order of an integer `g` in the group of units from the field Fp, where p is the prime `prime`.
+/// The funciton will not panic if `prime` is not prime or `prime` divides `g`, since the function is unchecked. Useful when one already knows that `prime` is prime.
+pub fn compute_order_fp_unchecked(prime: u32, mut g: u32) -> u32 {
     let base = g;
     let mut n = 1;
     while g != 1 {
@@ -215,11 +246,52 @@ pub fn compute_order_fp(prime: u32, mut g: u32) -> u32 {
 /// The funciton will panic if `prime` is not prime, `prime` divides `num` or `prime` divides `g`.
 pub fn shanks_algorithm(prime: u32, g: u32, num: u32) -> Option<u32> {
     assert!(is_prime(prime) && g % prime != 0 && num % prime != 0);
+    shanks_algorithm_unchecked(prime, g, num)
     // First compute order of g
-    let base_order = compute_order(prime, g);
-    let n = f32::floor(f32::sqrt(base_order as f32)) as u32 + 1;
-    let mut prod = 1;
+    // let base_order = compute_order(prime, g);
+    // let n = f32::floor(f32::sqrt(base_order as f32)) as u32 + 1;
+    // let mut prod = 1;
 
+    // let mut list1 = HashMap::new();
+
+    // for i in 0..(n as i32) {
+    //     list1.insert(prod, i);
+    //     prod *= g;
+    //     prod %= prime;
+    // }
+
+    // // insert final value
+    // list1.insert(prod, n as i32);
+
+    // // Now compute second list, we don't actually need to allocate any memory for this only set up variables
+    // let mut u = 1;
+    // let prod_inverse = compute_inverse_fp(prime, prod);
+
+    // for i in 0..=(n as i32) {
+    //     // Check if we have a match
+    //     if let Some(x) = list1.get(&(num * u)) {
+    //         let res = (x + (i * (n as i32))) as u32;
+    //         return Some(res);
+    //     }
+    //     // otherwise update value of u
+    //     u *= prod_inverse;
+    //     u %= prime;
+    // }
+
+    // None
+}
+
+/// An unchecked version of `shanks_algorithm` useful and more efficient when the caller has already established the necessary conditions for the algorithm to be successful.
+/// Function will solve the discrete logarithm of `num` with base `g` in the group of units from the field Fp, where p is the prime supplied argument `prime`.
+/// The funciton will not panic if `prime` is not prime, `prime` divides `num` or `prime` divides `g` since it is the unchecked version.
+pub fn shanks_algorithm_unchecked(prime: u32, g: u32, num: u32) -> Option<u32> {
+    // First compute order of base
+    let base_order = compute_order_fp_unchecked(prime, g);
+
+    let n = f32::floor(f32::sqrt(base_order as f32)) as u32 + 1;
+
+    let mut prod = 1;
+    // first list for generating collisions
     let mut list1 = HashMap::new();
 
     for i in 0..(n as i32) {
@@ -228,20 +300,21 @@ pub fn shanks_algorithm(prime: u32, g: u32, num: u32) -> Option<u32> {
         prod %= prime;
     }
 
-    // insert final value
+    // insert final value of first list
     list1.insert(prod, n as i32);
 
-    // Now compute second list, we don't actually need to allocate any memory for this only set up variables
+    // now compute second list, we don't actually need to allocate any memory for this only set up variables
     let mut u = 1;
-    let prod_inverse = compute_inverse_fp(prime, prod);
+    let prod_inverse = compute_inverse_fp_unchecked(prime, prod);
 
     for i in 0..=(n as i32) {
-        // Check if we have a match
-        if let Some(x) = list1.get(&(num * u)) {
+        // check if we have a collision
+        if let Some(x) = list1.get(&(num * u % prime)) {
             let res = (x + (i * (n as i32))) as u32;
             return Some(res);
         }
-        // otherwise update value of u
+
+        // otherwise update the value of u
         u *= prod_inverse;
         u %= prime;
     }
@@ -258,9 +331,58 @@ pub fn shanks_algorithm_with_output(
     num: u32,
 ) -> (Option<u32>, u32, u32, HashMap<u32, i32>, HashMap<u32, i32>) {
     assert!(is_prime(prime) && g % prime != 0 && num % prime != 0);
+    shanks_algorithm_with_output_unchecked(prime, g, num)
+    // Compute order of base
+    // let order = compute_order(prime, g);
+    // let n = f32::floor(f32::sqrt(order as f32)) as u32 + 1;
 
+    // // Generate our first list
+    // let mut list1 = HashMap::new();
+    // let mut prod = 1;
+
+    // for i in 0..(n as i32) {
+    //     list1.insert(prod, i);
+    //     prod *= g;
+    //     prod %= prime;
+    // }
+
+    // // insert final value into the list1
+    // list1.insert(g, n as i32);
+
+    // // Now compute the inverse of base^n, note g = base^n from our previous computation
+    // let mut list2 = HashMap::new();
+    // let mut u = 1;
+    // let base_inverse = compute_inverse_fp(prime, prod);
+
+    // for i in 0..=(n as i32) {
+    //     // First always insert into list2
+    //     list2.insert(num * u, i);
+    //     // Then check if we have a match in list1
+    //     if let Some(x) = list1.get(&((num * u) % prime)) {
+    //         let res = x + (i * (n as i32));
+    //         return (Some(res as u32), base_inverse, n, list1, list2);
+    //     }
+
+    //     // otherwise update u and proceed
+    //     u *= base_inverse;
+    //     u %= prime;
+    // }
+
+    // // there is no discrete logarithm for the given base and num
+    // (None, base_inverse, n, list1, list2)
+}
+
+/// Function will solve the discrete logarithm of `num` with base `g` in the group of units from the field Fp, where p is the prime supplied argument `prime`.
+/// The function will also return the lists tat were generated the collision. The funciton will panic if `prime` is not prime,
+/// `prime` divides `num` or `prime` divides `g`.
+pub fn shanks_algorithm_with_output_unchecked(
+    prime: u32,
+    g: u32,
+    num: u32,
+) -> (Option<u32>, u32, u32, HashMap<u32, i32>, HashMap<u32, i32>) {
     // Compute order of base
     let order = compute_order(prime, g);
+
     let n = f32::floor(f32::sqrt(order as f32)) as u32 + 1;
 
     // Generate our first list
@@ -322,6 +444,48 @@ pub fn solve_congruences(congruences: Vec<(u32, u32)>) -> Option<u32> {
     }
 
     Some(x % m)
+}
+
+/// A function that will solve the discrete logarithm using shanks algorithm for prime powers in an efficient way.
+/// The funciton is unchecked for performance reasons, so assumes that all sufficient conditions on the inputs have been met, the output is not correct otherwise.
+pub fn solve_prime_power_unchecked(
+    prime_modulus: u32,
+    base: u32,
+    num: u32,
+    prime_factor: u32,
+    power: u32,
+) -> Option<u32> {
+    let mut x = 0;
+    let mut u = 1;
+    let mut v = u32::pow(prime_factor, power - 1);
+    // let b = u32::pow(base, u32::pow(prime, v));
+    let b = fast_power_fp_unchecked(prime_modulus, base, v);
+
+    // println!("{b}");
+
+    for _i in 0..power {
+        let curr_inverse = compute_inverse_fp_unchecked(
+            prime_modulus,
+            fast_power_fp_unchecked(prime_modulus, base, x),
+        );
+        let curr_num =
+            fast_power_fp_unchecked(prime_modulus, (num * curr_inverse) % prime_modulus, v);
+
+        if let Some(x_i) = shanks_algorithm_unchecked(
+            prime_modulus,
+            b,
+            fast_power_fp_unchecked(prime_modulus, (num * curr_inverse) % prime_modulus, v),
+        ) {
+            x += x_i * u;
+            x %= u32::pow(prime_factor, power);
+            u *= prime_factor;
+            v /= prime_factor;
+        } else {
+            return None;
+        }
+    }
+
+    Some(x)
 }
 
 /// A struct that will generate prime numbers that will generate prime numbers up to and including some final number.
@@ -537,7 +701,6 @@ impl FpUnitsDiscLogSolver {
     /// Method will panic if `base` % self.prime == 0 or `num` % self.prime == 0, since in this case either `base` or `num` is not in the group of units to begin with.
     pub fn pollhig_hellman(&self, base: u32, num: u32) -> Option<u32> {
         assert!(base % self.prime != 0 && num % self.prime != 0);
-
         // First compute order of base
         let order = self.compute_order(base);
 
@@ -565,6 +728,53 @@ impl FpUnitsDiscLogSolver {
             Some(sol) => Some(sol % self.prime),
             _ => None,
         }
+    }
+
+    /// A method for computing the discrete logarithm using Pollhig-Hellman algorithm, however,
+    /// it employs concurrency when solving the discrete logarithm problems for single prime power factors,
+    /// this is for performance reasons, but may not actually be necessary for many use cases.
+    /// Method will panic if `base` % self.prime == 0 or `num` % self.prime == 0, since in this case either `base` or `num` is not in the group of units to begin with.
+    pub fn pollhig_hellman_concurrent(&self, base: u32, num: u32) -> Option<u32> {
+        assert!(base % self.prime != 0 && num % self.prime != 0);
+        // First compute order of base
+        let order = self.compute_order(base);
+
+        // Compute prime power factors of order
+        let prime_powers = factor(order);
+
+        // Collect join handles from spawning the threads
+        let mut solution_handles = vec![];
+
+        for (prime, power, prime_power) in prime_powers {
+            let prime_modulus = self.prime;
+            // Spawn a thread for each prime power factor of order for solving the current discrete logarithm
+            solution_handles.push(thread::spawn(move || -> Result<(u32, u32), String> {
+                if let Some(y) = solve_prime_power_unchecked(
+                    prime_modulus,
+                    fast_power_fp_unchecked(prime_modulus, base, order / prime_power),
+                    fast_power_fp_unchecked(prime_modulus, num, order / prime_power),
+                    prime,
+                    power,
+                ) {
+                    Ok((y, prime_power))
+                } else {
+                    Err(String::from("no solution"))
+                }
+            }));
+        }
+
+        // convert join handles into vector of congruences
+        if let Ok(congruences) = solution_handles
+            .into_iter()
+            .map(|handle| handle.join().unwrap())
+            .collect::<Result<Vec<(u32, u32)>, String>>()
+        {
+            if let Some(x) = solve_congruences(congruences) {
+                return Some(x);
+            }
+        }
+
+        None
     }
 }
 
@@ -783,6 +993,7 @@ mod tests {
         let h = 9689;
         let solver = FpUnitsDiscLogSolver::new(prime);
         if let Some(x) = solver.pollhig_hellman(g, h) {
+            println!("{x}");
             println!(
                 "{} ^ {x} = {} mod {}",
                 g,
@@ -839,6 +1050,111 @@ mod tests {
             );
 
             assert_eq!(solver.fast_power(g, x), h);
+        }
+    }
+
+    #[test]
+    fn test_pollhig_hellman_concurrent() {
+        let prime = 11251;
+        let g = 23;
+        let h = 9689;
+        let solver = FpUnitsDiscLogSolver::new(prime);
+        if let Some(x) = solver.pollhig_hellman_concurrent(g, h) {
+            println!(
+                "{} ^ {x} = {} mod {}",
+                g,
+                solver.fast_power(g, x),
+                solver.prime
+            );
+
+            assert_eq!(solver.fast_power(g, x), h);
+        } else {
+            panic!("did not successfully compute result");
+        }
+
+        let prime = 71;
+        let g = 11;
+        let h = 21;
+        let solver = FpUnitsDiscLogSolver::new(prime);
+        if let Some(x) = solver.pollhig_hellman_concurrent(g, h) {
+            println!("{x}");
+            println!(
+                "{} ^ {x} = {} mod {}",
+                g,
+                solver.fast_power(g, x),
+                solver.prime
+            );
+
+            assert_eq!(solver.fast_power(g, x), h);
+        } else {
+            panic!("did not successfully compute result");
+        }
+
+        let prime = 593;
+        let g = 156;
+        let h = 116;
+        let solver = FpUnitsDiscLogSolver::new(prime);
+        if let Some(x) = solver.pollhig_hellman_concurrent(g, h) {
+            println!("{x}");
+            println!(
+                "{} ^ {x} = {} mod {}",
+                g,
+                solver.fast_power(g, x),
+                solver.prime
+            );
+
+            assert_eq!(solver.fast_power(g, x), h);
+        } else {
+            panic!("did not successfully compute result");
+        }
+
+        let prime = 3571;
+        let g = 650;
+        let h = 2213;
+        let solver = FpUnitsDiscLogSolver::new(prime);
+        if let Some(x) = solver.pollhig_hellman_concurrent(g, h) {
+            println!("{x}");
+            println!(
+                "{} ^ {x} = {} mod {}",
+                g,
+                solver.fast_power(g, x),
+                solver.prime
+            );
+
+            assert_eq!(solver.fast_power(g, x), h);
+        } else {
+            panic!("did not successfully compute result");
+        }
+    }
+
+    #[test]
+    fn test_solve_prime_power_unchecked() {
+        let prime = 11251;
+        let base = 5448;
+        let num = 6909;
+        let prime_factor = 5;
+        let prime_power = 4;
+        if let Some(x) = solve_prime_power_unchecked(prime, base, num, prime_factor, prime_power) {
+            println!("{x}");
+        }
+        // let solver = FpUnitsDiscLogSolver::new(11251);
+        // if let Some(x) = solver.solve_prime_power(5448, 6909, 5, 4) {
+        //     println!("{x}");
+        //     assert!(x % 11251 == 511);
+        // } else {
+        //     println!("panicing returned None");
+        //     panic!();
+        // }
+    }
+
+    #[test]
+    fn test_shanks_algorithm_unchecked() {
+        let base = 11089;
+        let num = 6320;
+        let prime = 11251;
+
+        if let Some(x) = shanks_algorithm_unchecked(prime, base, num) {
+            println!("{x}");
         }
     }
 }
