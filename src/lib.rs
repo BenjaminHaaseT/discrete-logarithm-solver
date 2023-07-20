@@ -247,38 +247,6 @@ pub fn compute_order_fp_unchecked(prime: u32, mut g: u32) -> u32 {
 pub fn shanks_algorithm(prime: u32, g: u32, num: u32) -> Option<u32> {
     assert!(is_prime(prime) && g % prime != 0 && num % prime != 0);
     shanks_algorithm_unchecked(prime, g, num)
-    // First compute order of g
-    // let base_order = compute_order(prime, g);
-    // let n = f32::floor(f32::sqrt(base_order as f32)) as u32 + 1;
-    // let mut prod = 1;
-
-    // let mut list1 = HashMap::new();
-
-    // for i in 0..(n as i32) {
-    //     list1.insert(prod, i);
-    //     prod *= g;
-    //     prod %= prime;
-    // }
-
-    // // insert final value
-    // list1.insert(prod, n as i32);
-
-    // // Now compute second list, we don't actually need to allocate any memory for this only set up variables
-    // let mut u = 1;
-    // let prod_inverse = compute_inverse_fp(prime, prod);
-
-    // for i in 0..=(n as i32) {
-    //     // Check if we have a match
-    //     if let Some(x) = list1.get(&(num * u)) {
-    //         let res = (x + (i * (n as i32))) as u32;
-    //         return Some(res);
-    //     }
-    //     // otherwise update value of u
-    //     u *= prod_inverse;
-    //     u %= prime;
-    // }
-
-    // None
 }
 
 /// An unchecked version of `shanks_algorithm` useful and more efficient when the caller has already established the necessary conditions for the algorithm to be successful.
@@ -332,44 +300,6 @@ pub fn shanks_algorithm_with_output(
 ) -> (Option<u32>, u32, u32, HashMap<u32, i32>, HashMap<u32, i32>) {
     assert!(is_prime(prime) && g % prime != 0 && num % prime != 0);
     shanks_algorithm_with_output_unchecked(prime, g, num)
-    // Compute order of base
-    // let order = compute_order(prime, g);
-    // let n = f32::floor(f32::sqrt(order as f32)) as u32 + 1;
-
-    // // Generate our first list
-    // let mut list1 = HashMap::new();
-    // let mut prod = 1;
-
-    // for i in 0..(n as i32) {
-    //     list1.insert(prod, i);
-    //     prod *= g;
-    //     prod %= prime;
-    // }
-
-    // // insert final value into the list1
-    // list1.insert(g, n as i32);
-
-    // // Now compute the inverse of base^n, note g = base^n from our previous computation
-    // let mut list2 = HashMap::new();
-    // let mut u = 1;
-    // let base_inverse = compute_inverse_fp(prime, prod);
-
-    // for i in 0..=(n as i32) {
-    //     // First always insert into list2
-    //     list2.insert(num * u, i);
-    //     // Then check if we have a match in list1
-    //     if let Some(x) = list1.get(&((num * u) % prime)) {
-    //         let res = x + (i * (n as i32));
-    //         return (Some(res as u32), base_inverse, n, list1, list2);
-    //     }
-
-    //     // otherwise update u and proceed
-    //     u *= base_inverse;
-    //     u %= prime;
-    // }
-
-    // // there is no discrete logarithm for the given base and num
-    // (None, base_inverse, n, list1, list2)
 }
 
 /// Function will solve the discrete logarithm of `num` with base `g` in the group of units from the field Fp, where p is the prime supplied argument `prime`.
@@ -526,6 +456,19 @@ impl std::iter::Iterator for PrimeGenerator {
     }
 }
 
+/// A struct for holding all of the relevant data when solving a prime power using the efficient shanks algorithm
+pub struct SolvePrimePowerOutput {}
+
+/// A struct for holding the output of a pollhig-hellman algorithm result.
+pub struct PollhigHellmanOutput {
+    prime_modulus: u32,
+    base: u32,
+    num: u32,
+    order: u32,
+    order_prime_factorization: Vec<(u32, u32, u32)>,
+    prime_power_solution_output: HashMap<(u32, u32), SolvePrimePowerOutput>,
+}
+
 /// A struct that encapsulates all the necessary functions for solving the discrete logarithm in the group of units from the field Fp.
 /// A `FpUnitsDiscLogSolver` may be preferable in many cases since only one check is required at initialization to ensure the modulus is prime,
 /// where as, many repeated checks that the modulus is prime will be needed if using only the functions declared in this module
@@ -655,7 +598,7 @@ impl FpUnitsDiscLogSolver {
 
         for i in 0..=(n as i32) {
             // First always insert into list2
-            list2.insert(num * u, i);
+            list2.insert(num * u % self.prime, i);
             // Then check if we have a match in list1
             if let Some(x) = list1.get(&((num * u) % self.prime)) {
                 let res = x + (i * (n as i32));
