@@ -1,3 +1,5 @@
+use actix_web::{body::BoxBody, http::header::ContentType, HttpResponse, Responder};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::error::Error;
 use std::marker::{Send, Sync};
@@ -376,6 +378,37 @@ pub fn solve_congruences(congruences: Vec<(u32, u32)>) -> Option<u32> {
     Some(x % m)
 }
 
+/// A function that does essentially the same thing as `solve_congruences` except that it returns the output of
+/// all intermediate congruences as computed via chinese remainder theorem, and returns the solution
+pub fn solve_congruences_with_output(
+    congruences: Vec<(u32, u32)>,
+) -> Option<(u32, Vec<(u32, u32, u32, u32, u32)>)> {
+    let (mut x, mut m) = (congruences[0].0, congruences[0].1);
+    let mut congruence_solutions = vec![(x, m, 1, x, m)];
+
+    for i in 1..congruences.len() {
+        let (a_i, m_i) = congruences[i];
+        let y = if let Some(m_inv) = compute_inverse_mod_n(m, m_i) {
+            let temp_x = x % m_i;
+            if temp_x > a_i {
+                ((a_i + (m_i - temp_x)) * m_inv) % m_i
+            } else {
+                ((a_i - temp_x) * m_inv) % m_i
+            }
+        } else {
+            // Otherwise no solution exists for this system of congruences
+            return None;
+        };
+
+        let x_ = (m * y) % (m * m_i) + (x % (m * m_i));
+        x = x_;
+        m *= m_i;
+        congruence_solutions.push((x, m, y, a_i, m_i));
+    }
+
+    Some((x, congruence_solutions))
+}
+
 /// A function that will solve the discrete logarithm using shanks algorithm for prime powers in an efficient way.
 /// The funciton is unchecked for performance reasons, so assumes that all sufficient conditions on the inputs have been met, the output is not correct otherwise.
 pub fn solve_prime_power_unchecked(
@@ -418,6 +451,69 @@ pub fn solve_prime_power_unchecked(
     Some(x)
 }
 
+/// A method that essentially performs the same algorithm as `solve_prime_power_unchecked` however it collects
+/// the generated data that may be of interest and returns an `Option<PrimeSolver>` as its output instead of the single answer that represents a solution.
+pub fn solve_prime_power_with_output_unchecked(
+    prime_modulus: u32,
+    base: u32,
+    num: u32,
+    prime_factor: u32,
+    power: u32,
+) -> Option<SolvePrimePowerOutput> {
+    let mut temp_solutions = HashMap::new();
+
+    let mut x = 0;
+    let mut u = 1;
+    let mut v = u32::pow(prime_factor, power - 1);
+
+    let temp_base = fast_power_fp_unchecked(prime_modulus, base, v);
+
+    for i in 0..power {
+        let curr_inverse = compute_inverse_fp_unchecked(
+            prime_modulus,
+            fast_power_fp_unchecked(prime_modulus, base, x),
+        );
+        let curr_num =
+            fast_power_fp_unchecked(prime_modulus, (num * curr_inverse) % prime_modulus, v);
+
+        if let (Some(x_i), base_inverse, n, list1, list2) = shanks_algorithm_with_output_unchecked(
+            prime_modulus,
+            temp_base,
+            fast_power_fp_unchecked(prime_modulus, (num * curr_inverse) % prime_modulus, v),
+        ) {
+            temp_solutions.insert(
+                (x_i, i, curr_inverse),
+                ShanksOutput {
+                    prime: prime_factor,
+                    base: temp_base,
+                    num: curr_num,
+                    n,
+                    log: x_i,
+                    base_inverse,
+                    collision_list1: list1,
+                    collision_list2: list2,
+                },
+            );
+            x += x_i * u;
+            x %= u32::pow(prime_factor, power);
+            u *= prime_factor;
+            v /= prime_factor;
+        } else {
+            return None;
+        }
+    }
+
+    Some(SolvePrimePowerOutput {
+        prime: prime_factor,
+        exp: power,
+        num,
+        base,
+        temp_base,
+        temp_solutions,
+        solution: x,
+    })
+}
+
 /// A struct that will generate prime numbers that will generate prime numbers up to and including some final number.
 pub struct PrimeGenerator {
     n: u32,
@@ -456,17 +552,83 @@ impl std::iter::Iterator for PrimeGenerator {
     }
 }
 
+/// A struct for collecting all relevant data when solving the discrete logarithm using shanks algorithm
+#[derive(Serialize, Debug)]
+pub struct ShanksOutput {
+    pub prime: u32,
+    pub base: u32,
+    pub num: u32,
+    pub n: u32,
+    pub log: u32,
+    pub base_inverse: u32,
+    pub collision_list1: HashMap<u32, i32>,
+    pub collision_list2: HashMap<u32, i32>,
+}
+
+impl Responder for ShanksOutput {
+    type Body = BoxBody;
+
+    fn respond_to(self, req: &actix_web::HttpRequest) -> HttpResponse<Self::Body> {
+        let body = serde_json::to_string(&self).unwrap();
+        HttpResponse::Ok()
+            .content_type(ContentType::json())
+            .body(body)
+    }
+}
+
+impl std::fmt::Display for ShanksOutput {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f, 
+            "prime: {}\n base: {}\n num: {}\n n: {}\n log: {}\n base_inverse: {}\n list1: {:?}\n list2: {:?}\n", 
+            self.prime, self.base, self.num, self.n, self.log, self.base_inverse, self.collision_list1, self.collision_list2
+        )
+    }
+}
+
 /// A struct for holding all of the relevant data when solving a prime power using the efficient shanks algorithm
-pub struct SolvePrimePowerOutput {}
+#[derive(Serialize, Debug)]
+pub struct SolvePrimePowerOutput {
+    pub prime: u32,
+    pub exp: u32,
+    pub num: u32,
+    pub base: u32,
+    pub temp_base: u32,
+    pub temp_solutions: HashMap<(u32, u32, u32), ShanksOutput>,
+    pub solution: u32,
+}
+
+impl std::fmt::Display for SolvePrimePowerOutput {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "prime: {}\n exp: {}\n num: {}\n base: {}\n temp_base: {}\n temp_solutions: {:?}\n solution: {}",
+            self.prime, self.exp, self.num, self.base, self.temp_base, self.temp_solutions, self.solution,
+        )
+    }
+}
 
 /// A struct for holding the output of a pollhig-hellman algorithm result.
+ #[derive(Serialize, Debug)]
 pub struct PollhigHellmanOutput {
     prime_modulus: u32,
     base: u32,
     num: u32,
     order: u32,
     order_prime_factorization: Vec<(u32, u32, u32)>,
-    prime_power_solution_output: HashMap<(u32, u32), SolvePrimePowerOutput>,
+    prime_power_solution_output: Vec<SolvePrimePowerOutput>,
+    congruences: Vec<(u32, u32, u32, u32, u32)>,
+    solution: u32,
+}
+
+impl std::fmt::Display for PollhigHellmanOutput {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "prime_modulus: {}\n base: {}\n num: {}\n order: {}\n order_factorization: {:?}\n prime_power_solution_output: {:#?}\n congruences: {:?}\n solution: {}",
+            self.prime_modulus, self.base, self.num, self.order, self.order_prime_factorization, self.prime_power_solution_output, self.congruences, self.solution
+        )
+    }
 }
 
 /// A struct that encapsulates all the necessary functions for solving the discrete logarithm in the group of units from the field Fp.
@@ -718,6 +880,73 @@ impl FpUnitsDiscLogSolver {
         }
 
         None
+    }
+
+    /// A method for computing the discrete logarithm using Pollhig-Hellman algorithm, however it returns the generated data that is of interest from the procedure.
+    /// The method employs concurrency when solving the discrete logarithm problems for single prime power factors,
+    /// this is for performance reasons, but may not actually be necessary for many use cases.
+    /// Method will panic if `base` % self.prime == 0 or `num` % self.prime == 0, since in this case either `base` or `num` is not in the group of units to begin with.
+    pub fn pollhig_hellman_with_output(&self, base: u32, num: u32) -> Option<PollhigHellmanOutput> {
+        assert!(base % self.prime != 0 && num % self.prime != 0);
+        // First compute order of base
+        let order = self.compute_order(base);
+
+        // Compute prime power factors of order
+        let prime_powers = factor(order);
+
+        // Collect join handles from spawning the threads
+        let mut solution_handles = vec![];
+
+        for (prime, power, prime_power) in &prime_powers {
+            // Move out of referenced values so we can pass them to a new thread
+            let prime_modulus = self.prime;
+            let (prime, power, prime_power) = (*prime, *power, *prime_power);
+            // Spawn a thread for each prime power factor of order for solving the current discrete logarithm
+            solution_handles.push(thread::spawn(
+                move || -> Result<(SolvePrimePowerOutput, u32), String> {
+                    if let Some(out) = solve_prime_power_with_output_unchecked(
+                        prime_modulus,
+                        fast_power_fp_unchecked(prime_modulus, base, order / prime_power),
+                        fast_power_fp_unchecked(prime_modulus, num, order / prime_power),
+                        prime,
+                        power,
+                    ) {
+                        Ok((out, prime_power))
+                    } else {
+                        Err(String::from("no solution"))
+                    }
+                },
+            ));
+        }
+
+        // Now for each join handle, solve the congruences and save the output. In addition save the prime power solver output in a vector as well
+        let mut prime_power_outputs = vec![];
+        let mut congruences = vec![];
+
+        for handle in solution_handles {
+            if let Ok((res, prime_power)) = handle.join().unwrap() {
+                congruences.push((res.solution, prime_power));
+                prime_power_outputs.push(res);
+            } else {
+                return None;
+            }
+        }
+
+        // Now solve the congruences, saving the output of each sub-congruence, to illustrate the algorithm
+        if let Some((solution, congruence_output)) = solve_congruences_with_output(congruences) {
+            Some(PollhigHellmanOutput {
+                prime_modulus: self.prime,
+                base: base,
+                num: num,
+                order: order,
+                order_prime_factorization: prime_powers,
+                prime_power_solution_output: prime_power_outputs,
+                congruences: congruence_output,
+                solution,
+            })
+        } else {
+            None
+        }
     }
 }
 
@@ -1080,14 +1309,6 @@ mod tests {
         if let Some(x) = solve_prime_power_unchecked(prime, base, num, prime_factor, prime_power) {
             println!("{x}");
         }
-        // let solver = FpUnitsDiscLogSolver::new(11251);
-        // if let Some(x) = solver.solve_prime_power(5448, 6909, 5, 4) {
-        //     println!("{x}");
-        //     assert!(x % 11251 == 511);
-        // } else {
-        //     println!("panicing returned None");
-        //     panic!();
-        // }
     }
 
     #[test]
@@ -1098,6 +1319,83 @@ mod tests {
 
         if let Some(x) = shanks_algorithm_unchecked(prime, base, num) {
             println!("{x}");
+        }
+    }
+
+    #[test]
+    fn test_pollhig_hellman_with_output() {
+        let prime = 11251;
+        let g = 23;
+        let h = 9689;
+        let solver = FpUnitsDiscLogSolver::new(prime);
+        if let Some(out) = solver.pollhig_hellman_with_output(g, h) {
+            println!(
+                "{} ^ {} = {} mod {}",
+                g,
+                out.solution,
+                solver.fast_power(g, out.solution),
+                solver.prime
+            );
+
+            println!("{}", out);
+
+            assert_eq!(solver.fast_power(g, out.solution), h);
+        } else {
+            panic!("did not successfully compute result");
+        }
+
+        let prime = 71;
+        let g = 11;
+        let h = 21;
+        let solver = FpUnitsDiscLogSolver::new(prime);
+        if let Some(x) = solver.pollhig_hellman_concurrent(g, h) {
+            println!("{x}");
+            println!(
+                "{} ^ {x} = {} mod {}",
+                g,
+                solver.fast_power(g, x),
+                solver.prime
+            );
+
+            assert_eq!(solver.fast_power(g, x), h);
+        } else {
+            panic!("did not successfully compute result");
+        }
+
+        let prime = 593;
+        let g = 156;
+        let h = 116;
+        let solver = FpUnitsDiscLogSolver::new(prime);
+        if let Some(x) = solver.pollhig_hellman_concurrent(g, h) {
+            println!("{x}");
+            println!(
+                "{} ^ {x} = {} mod {}",
+                g,
+                solver.fast_power(g, x),
+                solver.prime
+            );
+
+            assert_eq!(solver.fast_power(g, x), h);
+        } else {
+            panic!("did not successfully compute result");
+        }
+
+        let prime = 3571;
+        let g = 650;
+        let h = 2213;
+        let solver = FpUnitsDiscLogSolver::new(prime);
+        if let Some(x) = solver.pollhig_hellman_concurrent(g, h) {
+            println!("{x}");
+            println!(
+                "{} ^ {x} = {} mod {}",
+                g,
+                solver.fast_power(g, x),
+                solver.prime
+            );
+
+            assert_eq!(solver.fast_power(g, x), h);
+        } else {
+            panic!("did not successfully compute result");
         }
     }
 }

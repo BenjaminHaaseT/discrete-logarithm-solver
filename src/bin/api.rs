@@ -4,7 +4,7 @@ use actix_web::{
     http::{header::ContentType, StatusCode},
     post, web, App, HttpResponse, HttpServer, Responder,
 };
-use discrete_logarithm_lib::{is_prime, FpUnitsDiscLogSolver};
+use discrete_logarithm_lib::{is_prime, FpUnitsDiscLogSolver, ShanksOutput};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -13,29 +13,6 @@ struct FpInputs {
     prime: u32,
     base: u32,
     num: u32,
-}
-
-#[derive(Serialize)]
-struct ShanksOutput {
-    prime: u32,
-    base: u32,
-    num: u32,
-    n: u32,
-    log: u32,
-    base_inverse: u32,
-    collision_list1: HashMap<u32, i32>,
-    collision_list2: HashMap<u32, i32>,
-}
-
-impl Responder for ShanksOutput {
-    type Body = BoxBody;
-
-    fn respond_to(self, req: &actix_web::HttpRequest) -> HttpResponse<Self::Body> {
-        let body = serde_json::to_string(&self).unwrap();
-        HttpResponse::Ok()
-            .content_type(ContentType::json())
-            .body(body)
-    }
 }
 
 #[derive(Debug)]
