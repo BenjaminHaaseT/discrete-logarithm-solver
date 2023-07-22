@@ -1346,58 +1346,61 @@ mod tests {
             panic!("did not successfully compute result");
         }
 
-        // let prime = 71;
-        // let g = 11;
-        // let h = 21;
-        // let solver = FpUnitsDiscLogSolver::new(prime);
-        // if let Some(x) = solver.pollhig_hellman_concurrent(g, h) {
-        //     println!("{x}");
-        //     println!(
-        //         "{} ^ {x} = {} mod {}",
-        //         g,
-        //         solver.fast_power(g, x),
-        //         solver.prime
-        //     );
+        let prime = 71;
+        let g = 11;
+        let h = 21;
+        let solver = FpUnitsDiscLogSolver::new(prime);
+        if let Some(out) = solver.pollhig_hellman_with_output(g, h) {
+            println!("{}", out.solution);
+            println!(
+                "{} ^ {} = {} mod {}",
+                g,
+                out.solution,
+                solver.fast_power(g, out.solution),
+                solver.prime
+            );
 
-        //     assert_eq!(solver.fast_power(g, x), h);
-        // } else {
-        //     panic!("did not successfully compute result");
-        // }
+            assert_eq!(solver.fast_power(g, out.solution), h);
+        } else {
+            panic!("did not successfully compute result");
+        }
 
-        // let prime = 593;
-        // let g = 156;
-        // let h = 116;
-        // let solver = FpUnitsDiscLogSolver::new(prime);
-        // if let Some(x) = solver.pollhig_hellman_concurrent(g, h) {
-        //     println!("{x}");
-        //     println!(
-        //         "{} ^ {x} = {} mod {}",
-        //         g,
-        //         solver.fast_power(g, x),
-        //         solver.prime
-        //     );
+        let prime = 593;
+        let g = 156;
+        let h = 116;
+        let solver = FpUnitsDiscLogSolver::new(prime);
+        if let Some(out) = solver.pollhig_hellman_with_output(g, h) {
+            println!("{}", out.solution);
+            println!(
+                "{} ^ {} = {} mod {}",
+                g,
+                out.solution,
+                solver.fast_power(g, out.solution),
+                solver.prime
+            );
 
-        //     assert_eq!(solver.fast_power(g, x), h);
-        // } else {
-        //     panic!("did not successfully compute result");
-        // }
+            assert_eq!(solver.fast_power(g, out.solution), h);
+        } else {
+            panic!("did not successfully compute result");
+        }
 
-        // let prime = 3571;
-        // let g = 650;
-        // let h = 2213;
-        // let solver = FpUnitsDiscLogSolver::new(prime);
-        // if let Some(x) = solver.pollhig_hellman_concurrent(g, h) {
-        //     println!("{x}");
-        //     println!(
-        //         "{} ^ {x} = {} mod {}",
-        //         g,
-        //         solver.fast_power(g, x),
-        //         solver.prime
-        //     );
+        let prime = 3571;
+        let g = 650;
+        let h = 2213;
+        let solver = FpUnitsDiscLogSolver::new(prime);
+        if let Some(out) = solver.pollhig_hellman_with_output(g, h) {
+            println!("{}", out.solution);
+            println!(
+                "{} ^ {} = {} mod {}",
+                g,
+                out.solution,
+                solver.fast_power(g, out.solution),
+                solver.prime
+            );
 
-        //     assert_eq!(solver.fast_power(g, x), h);
-        // } else {
-        //     panic!("did not successfully compute result");
-        // }
+            assert_eq!(solver.fast_power(g, out.solution), h);
+        } else {
+            panic!("did not successfully compute result");
+        }
     }
 }
