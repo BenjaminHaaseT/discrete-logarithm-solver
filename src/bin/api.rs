@@ -4,7 +4,7 @@ use actix_web::{
     http::{header::ContentType, StatusCode},
     post, web, App, HttpResponse, HttpServer, Responder,
 };
-use discrete_logarithm_lib::{is_prime, FpUnitsDiscLogSolver, ShanksOutput};
+use discrete_logarithm_lib::{is_prime, FpUnitsDiscLogSolver, PollhigHellmanOutput, ShanksOutput};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -51,7 +51,6 @@ impl error::ResponseError for UserError {
 /// A handler that will take a query from the caller, validate that the inputs sent meets the constraints, then solve the discrete logarithm.
 /// Returns an `HttpResponse::Ok()` if the discrete logarithm is found, otherwise it returns a `UserError::NoSolution`.
 /// It is up to the caller to determine what to do in the case where no solution exists.
-///
 #[get("/shanks-algorithm")]
 async fn shanks_algorithm_handler(info: web::Query<FpInputs>) -> Result<HttpResponse, UserError> {
     let (prime, base, num) = (info.prime, info.base, info.num);
@@ -134,7 +133,7 @@ async fn shanks_algorithm_with_output_handler(
     }
 }
 
-#[get("/pollhig-hellman")]
+#[get("/pollhig-hellman-algorithm")]
 async fn pollhig_hellman_handler(input: web::Query<FpInputs>) -> Result<HttpResponse, UserError> {
     // Validate inputs first
     let (prime, base, num) = (input.prime, input.base, input.num);
@@ -158,12 +157,47 @@ async fn pollhig_hellman_handler(input: web::Query<FpInputs>) -> Result<HttpResp
 
     let solver = FpUnitsDiscLogSolver::new(prime);
 
-    if let Some(solution) = solver.pollhig_hellman(base, num) {
+    if let Some(solution) = solver.pollhig_hellman_concurrent(base, num) {
         return Ok(HttpResponse::Ok().body(solution.to_string()));
     }
 
     Err(UserError::NoSolution(String::from(
-        "no solution for given inputs",
+        "no solution for the given inputs",
+    )))
+}
+
+#[get("/pollhig-hellman-algorithm-with-output")]
+async fn pollhig_hellman_with_output_handler(
+    input: web::Query<FpInputs>,
+) -> Result<PollhigHellmanOutput, UserError> {
+    // Validate inputs first
+    let (prime, base, num) = (input.prime, input.base, input.num);
+
+    if !is_prime(prime) {
+        return Err(UserError::BadInput(format!(
+            "invalid input, {} is not prime",
+            prime
+        )));
+    } else if base % prime == 0 {
+        return Err(UserError::BadInput(format!(
+            "invalid input, {} is not a valid base since {} mod {} = 0",
+            base, base, prime
+        )));
+    } else if num % prime == 0 {
+        return Err(UserError::BadInput(format!(
+            "no solution since {} mod {} = 0",
+            num, prime
+        )));
+    }
+
+    let solver = FpUnitsDiscLogSolver::new(prime);
+
+    if let Some(output) = solver.pollhig_hellman_with_output(base, num) {
+        return Ok(output);
+    }
+
+    Err(UserError::NoSolution(String::from(
+        "no solution for the given inputs",
     )))
 }
 
@@ -171,13 +205,20 @@ async fn pollhig_hellman_handler(input: web::Query<FpInputs>) -> Result<HttpResp
 async fn main() -> std::io::Result<()> {
     let address = "127.0.0.1";
     let port = 8080;
+    println!("listening at {}:{}...", address, port);
 
     HttpServer::new(|| {
-        App::new().service(
-            web::scope("/shanks")
-                .service(shanks_algorithm_handler)
-                .service(shanks_algorithm_with_output_handler),
-        )
+        App::new()
+            .service(
+                web::scope("/shanks")
+                    .service(shanks_algorithm_handler)
+                    .service(shanks_algorithm_with_output_handler),
+            )
+            .service(
+                web::scope("/pollhig-hellman")
+                    .service(pollhig_hellman_handler)
+                    .service(pollhig_hellman_with_output_handler),
+            )
     })
     .bind((address, port))?
     .run()

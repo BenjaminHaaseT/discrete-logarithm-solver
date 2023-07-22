@@ -460,7 +460,7 @@ pub fn solve_prime_power_with_output(
     prime_factor: u32,
     power: u32,
 ) -> Option<SolvePrimePowerOutput> {
-    let mut temp_solutions = HashMap::new();
+    let mut temp_solutions = Vec::new();
 
     let mut x = 0;
     let mut u = 1;
@@ -481,7 +481,7 @@ pub fn solve_prime_power_with_output(
             temp_base,
             fast_power_fp_unchecked(prime_modulus, (num * curr_inverse) % prime_modulus, v),
         ) {
-            temp_solutions.insert(
+            temp_solutions.push((
                 (x_i, i, curr_inverse),
                 ShanksOutput {
                     prime: prime_factor,
@@ -493,7 +493,7 @@ pub fn solve_prime_power_with_output(
                     collision_list1: list1,
                     collision_list2: list2,
                 },
-            );
+            ));
             x += x_i * u;
             x %= u32::pow(prime_factor, power);
             u *= prime_factor;
@@ -586,6 +586,14 @@ impl std::fmt::Display for ShanksOutput {
     }
 }
 
+// type TempSolutionKey = (u32, u32, u32);
+
+// impl std::fmt::Display for (u32, u32, u32) {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         write!(f, "({}, {}, {})", self.0, self.1, self.2)
+//     }
+// }
+
 /// A struct for holding all of the relevant data when solving a prime power using the efficient shanks algorithm
 #[derive(Serialize, Debug)]
 pub struct SolvePrimePowerOutput {
@@ -594,7 +602,7 @@ pub struct SolvePrimePowerOutput {
     pub num: u32,
     pub base: u32,
     pub temp_base: u32,
-    pub temp_solutions: HashMap<(u32, u32, u32), ShanksOutput>,
+    pub temp_solutions: Vec<((u32, u32, u32), ShanksOutput)>,
     pub solution: u32,
 }
 
@@ -628,6 +636,19 @@ impl std::fmt::Display for PollhigHellmanOutput {
             "prime_modulus: {}\n base: {}\n num: {}\n order: {}\n order_factorization: {:?}\n prime_power_solution_output: {:#?}\n congruences: {:?}\n solution: {}",
             self.prime_modulus, self.base, self.num, self.order, self.order_prime_factorization, self.prime_power_solution_output, self.congruences, self.solution
         )
+    }
+}
+
+impl Responder for PollhigHellmanOutput {
+    type Body = BoxBody;
+
+    fn respond_to(self, req: &actix_web::HttpRequest) -> HttpResponse<Self::Body> {
+        let body = serde_json::to_string(&self).unwrap();
+        // let body = body.unwrap();
+        HttpResponse::Ok()
+            .content_type(ContentType::json())
+            .body(body)
+        
     }
 }
 
